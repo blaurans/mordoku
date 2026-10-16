@@ -4,23 +4,22 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Mordoku</title>
-    <meta
-      name="description"
-      content="Jeu de sudoku en HTML, CSS et JavaScript. Aucune dépendance, aucun compte."
-    />
+    <meta name="description" content="Murdoku en ligne, sans dépendance, tout se passe dans le navigateur." />
     <meta name="color-scheme" content="dark light" />
     <link rel="stylesheet" href="css/style.css" />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23151a23'/><text y='72' x='50' text-anchor='middle' font-size='62' font-family='monospace' fill='%236ea8fe'>9</text></svg>"
-    />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23151a23'/><text y='72' x='50' text-anchor='middle' font-size='62' font-family='monospace' fill='%23ff6b6b'>?</text></svg>" />
   </head>
   <body>
-    <a class="saut-contenu" href="#grille">Aller à la grille</a>
+    <a class="saut-contenu" href="#scene">Aller à la scène</a>
 
     <header class="entete">
       <h1 class="titre">Mordoku</h1>
-      <div class="entete-actions">
+      <div class="entete-méta">
+        <select id="select-difficulte" aria-label="Difficulté">
+          <option value="debutant">Débutant (6×6)</option>
+          <option value="facile">Facile (7×7)</option>
+          <option value="intermediaire">Intermédiaire (8×8)</option>
+        </select>
         <span class="chrono" id="chrono" aria-live="off" title="Temps écoulé">00:00</span>
         <button type="button" id="bouton-pause" class="bouton-icon" aria-pressed="false">
           <span aria-hidden="true">⏸</span><span class="sr-only">Pause</span>
@@ -32,99 +31,64 @@
       </div>
     </header>
 
-    <main class="plateau">
-      <section class="colonne-principale">
-        <div class="barre-outils">
-          <label class="champ">
-            <span>Difficulté</span>
-            <select id="difficulte"></select>
-          </label>
-          <button type="button" id="bouton-nouvelle" class="bouton bouton-primaire">
-            Nouvelle partie
-          </button>
-          <div class="compteurs">
-            <span class="compteur" title="Indices utilisés">Indices <b id="compteur-indices">0</b></span>
-            <span class="compteur" title="Erreurs repérées">Erreurs <b id="compteur-erreurs">0</b></span>
+    <main class="plateau" id="surface-principale">
+      <section class="zone-scene" id="zone-scene">
+        <div class="titre-scene">
+          <span class="titre-affaire" id="titre-affaire">Nouvelle affaire</span>
+          <span class="numero" id="numero-case">CAS n°—</span>
+        </div>
+        <div id="scene" class="scene" role="grid" aria-label="Scène de crime" tabindex="0"></div>
+        <div id="voile" class="voile" hidden>
+          <div class="voile-boite">
+            <p class="voile-titre">En pause</p>
+            <button type="button" id="bouton-reprendre" class="bouton bouton-primaire">Reprendre</button>
           </div>
         </div>
-
-        <div class="zone-grille">
-          <div
-            id="grille"
-            class="grille"
-            role="grid"
-            aria-label="Grille de sudoku 9 sur 9"
-            aria-rowcount="9"
-            aria-colcount="9"
-          ></div>
-
-          <div id="voile" class="voile" hidden>
-            <div class="voile-boite">
-              <p class="voile-titre">En pause</p>
-              <button type="button" id="bouton-reprendre" class="bouton bouton-primaire">
-                Reprendre
-              </button>
-            </div>
-          </div>
-
-          <div id="fin" class="fin" role="status" hidden>
-            <p class="fin-titre">Grille résolue 🎉</p>
-            <p class="fin-detail" id="fin-detail"></p>
-          </div>
+        <div id="chargement" class="chargement" aria-live="polite" hidden>
+          <span class="spinner"></span>
+          <span>Génération de la scène…</span>
         </div>
+      </section>
 
-        <div class="barre-saisie">
-          <div class="pave" role="group" aria-label="Pavé numérique">
-            <div class="pave-chiffres">
-              <button type="button" class="touche" data-saisie="1">1</button>
-              <button type="button" class="touche" data-saisie="2">2</button>
-              <button type="button" class="touche" data-saisie="3">3</button>
-              <button type="button" class="touche" data-saisie="4">4</button>
-              <button type="button" class="touche" data-saisie="5">5</button>
-              <button type="button" class="touche" data-saisie="6">6</button>
-              <button type="button" class="touche" data-saisie="7">7</button>
-              <button type="button" class="touche" data-saisie="8">8</button>
-              <button type="button" class="touche" data-saisie="9">9</button>
-            </div>
-            <div class="pave-actions">
-              <button type="button" id="bouton-notes" class="touche touche-notes" aria-pressed="false">
-                Notes
-              </button>
-              <button type="button" id="bouton-effacer" class="touche">
-                <span aria-hidden="true">⌫</span><span class="sr-only">Effacer</span>
-              </button>
-            </div>
+      <aside class="colonne-laterale">
+        <section class="carte">
+          <h2>Suspects</h2>
+          <ul id="liste-suspects" class="liste-suspects"></ul>
+        </section>
+        <section class="carte" id="section-indices">
+          <h2>Indices généraux</h2>
+          <ul id="liste-indices" class="indices-generaux"></ul>
+          <p id="vide-indices" class="vide">Aucun indice général.</p>
+        </section>
+        <section class="carte">
+          <h2>Actions</h2>
+          <div class="actions-grille">
+            <button type="button" id="bouton-outil-selection" class="outil actif">Personne</button>
+            <button type="button" id="bouton-outil-x" class="outil">X</button>
+            <button type="button" id="bouton-effacer" class="outil">Effacer</button>
           </div>
-
-          <div class="barre-outils-secondaires">
+          <div class="actions-finales">
             <button type="button" id="bouton-annuler" class="bouton" disabled>Annuler</button>
             <button type="button" id="bouton-retablir" class="bouton" disabled>Rétablir</button>
             <button type="button" id="bouton-indice" class="bouton">Indice</button>
             <button type="button" id="bouton-verifier" class="bouton">Vérifier</button>
+            <button type="button" id="bouton-soumettre" class="bouton bouton-primaire" disabled>Soumettre</button>
           </div>
-        </div>
-      </section>
-
-      <aside class="colonne-cote">
+        </section>
         <section class="carte">
           <h2>Records</h2>
           <dl id="records" class="records"></dl>
         </section>
-
-        <section class="carte">
-          <h2>Raccourcis</h2>
-          <ul class="raccourcis">
-            <li><kbd>1</kbd>–<kbd>9</kbd> poser un chiffre</li>
-            <li><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> se déplacer</li>
-            <li><kbd>N</kbd> mode notes</li>
-            <li><kbd>⌫</kbd> effacer la case</li>
-            <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler</li>
-            <li><kbd>H</kbd> indice · <kbd>V</kbd> vérifier</li>
-            <li><kbd>P</kbd> pause · <kbd>T</kbd> thème</li>
-          </ul>
-        </section>
       </aside>
     </main>
+
+    <div id="fin" class="fin" role="status" hidden>
+      <button type="button" class="bouton-fermer" id="bouton-fermer-fin" aria-label="Fermer">×</button>
+      <p class="fin-titre" id="fin-titre">…</p>
+      <p class="fin-sous-titre" id="fin-sous-titre"></p>
+      <div class="reveal" id="reveal">…</div>
+      <button type="button" class="bouton bouton-primaire" id="bouton-nouvelle">Nouvelle affaire</button>
+    </div>
 
     <div id="annonce" class="sr-only" role="status" aria-live="polite"></div>
 

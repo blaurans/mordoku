@@ -1,70 +1,86 @@
 # Mordoku
 
-Jeu de sudoku en HTML/CSS/JavaScript vanilla. Aucune dépendance, aucun build,
-aucun compte : tout se joue dans le navigateur.
+Jeu web de Murdoku — déduction spatiale qui allie sudoku et enquête
+criminelle (« sudoku meets murder mystery »). Aucune dépendance, aucun
+build, aucun compte : tout se passe dans le navigateur, l'affaire est
+générée sur place.
 
 En ligne : <https://mordoku.laurans.org>
 
-## Fonctionnalités
+## Principe
 
-- Générateur à **solution unique** (backtracking + vérification d'unicité)
-- 4 difficultés : Facile, Moyen, Difficile, Expert
-- Notes / candidats
-- Chrono, pause et records par difficulté (`localStorage`)
-- Undo / redo
-- Vérifier (compte les erreurs) et Indice (révèle une case, pénalité chrono)
-- Surlignage de la case active, de sa ligne / colonne / bloc et des doublons
-- Clavier (1-9, flèches, espace, backspace) **et** pavé numérique tactile
-- Sauvegarde automatique, reprise au rechargement
-- Thème sombre par défaut, bascule clair/sombre mémorisée
+1. Une pièce est divisée en zones (salle, meuble, plante…). Quelques
+   cases sont interdites.
+2. Six à huit suspects plus la victime sont placés **un par ligne et une
+   par colonne**, comme au sudoku.
+3. Chaque suspect arrive avec une carte d'indice spatiale
+   (« A est à côté de la plante », « B est dans la 3e ligne »,
+   « C est la seule personne sur le tapis »…). Les indices sont des
+   contraintes.
+4. La carte est une preuve : zones, meubles et cases interdites comptent.
+5. Une fois le plateau rempli, le meurtrier est **la personne restée
+   seule avec la victime dans la même zone**.
+
+Chaque affaire possède exactement une solution déductible, sans deviner.
 
 ## Développement local
 
-Les modules ES ne se chargent pas depuis `file://`, il faut un serveur statique :
+Les modules ES ne se chargent pas depuis `file://`. Un serveur statique
+minuscule en Node suffit :
 
 ```sh
-python3 -m http.server 8000
-# puis http://localhost:8000/site/
+node /tmp/opencode/serve.mjs site 8933
+# http://127.0.0.1:8933/
 ```
 
 ## Tests
 
-La logique (`site/js/sudoku.js`) est pure et sans dépendance, elle est testée
-avec le runner natif de Node :
+Logique pure et sans dépendance, testée avec le runner natif de Node :
 
 ```sh
-node --test
+cd ~/mordoku && node --test
 ```
 
+39 tests (générateur, unicité, Solveur, scène, données).
+
 L'interface est vérifiée par un harnais qui pilote un Chromium headless via
-le protocole DevTools, sans aucune dépendance npm :
+le protocole DevTools, sans aucune dépendance npm (installé via mise) :
 
 ```sh
 chromium --headless=new --no-sandbox --remote-debugging-port=9222 \
-         --user-data-dir=/tmp/mordoku-chrome about:blank &
-MORDOKU_URL=https://mordoku.laurans.org/ node tests/e2e.mjs
+         --user-data-dir=/tmp/murdoku-chrome about:blank &
+MORDOKU_URL=http://127.0.0.1:8933/ node tests/e2e.mjs
 ```
 
-`tests/e2e.mjs` vide le localStorage de l'origine visée : ne pas le lancer
-depuis un profil contenant une partie en cours. Détails dans `handoff.md`.
+`tests/e2e.mjs` vide le `localStorage` de l'origine visée : ne pas le
+lancer depuis un profil contenant une partie en cours.
 
 ## Arborescence
 
 ```
 mordoku/
-├── site/            racine web : c'est ce dossier qui est servi par Caddy
+├── site/             racine web : c'est ce dossier qui est servi par Caddy
 │   ├── index.html
 │   ├── css/style.css
-│   └── js/{sudoku,storage,game}.js
-├── tests/           tests unitaires (node --test) et tests d'interface
-├── deploy/          extraits Caddy/compose appliqués sur le serveur
-├── handoff.md       contexte de reprise / déploiement
+│   └── js/{game.js, storage.js, murdoku/*}
+├── tests/            tests unitaires + tests d'interface
+├── deploy/           extraits Caddy/compose appliqués sur le serveur
+├── handoff.md        contexte de reprise / déploiement
 └── README.md
 ```
 
-Le dossier `site/` est volontairement isolé : le serveur ne monte que lui, donc
-ni les tests, ni cette documentation ne sont exposés sur Internet.
+Le dossier `site/` est volontairement isolé : le serveur ne monte que lui,
+donc ni les tests, ni cette documentation ne sont exposés sur Internet.
 
 ## Déploiement
 
-Voir `handoff.md`.
+Voir `handoff.md`. Résumé : `git push origin main` puis
+`ssh ociub 'sudo -H git -C /app/mordoku pull'` — le site sert le dossier
+`site/` en direct, pas de build, pas de reload.
+
+## Remarque sur la marque
+
+Murdoku est une marque de Digivoid Studios / Manuel Garand. Ce dépôt est
+un projet personnel d'apprentissage ; le contenu écrit (thèmes, noms de
+pièces, scènes) est original, et les mécaniques de jeu sont une réimplémentation. Le cas échéant, la page d'accueil renvoie au site officiel
+https://murdoku.com.

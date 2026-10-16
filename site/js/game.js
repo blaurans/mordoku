@@ -1,294 +1,134 @@
 /**
- * Mordoku — contrôleur de jeu : état, rendu, saisie clavier et tactile.
+ * Mordoku — contrôleur du jeu : affaire, scène, sélection, action.
+ * Tout reste dans le navigateur.
  */
 
 import {
-  COL_OF,
-  DIFFICULTIES,
-  DIFFICULTY_ORDER,
-  ROW_OF,
-  cloneGrid,
-  generatePuzzle,
-  hasConflict,
-  solve,
-  usedDigits,
-} from './sudoku.js';
+  genererAffaire,
+  genererAffaireAuHasard,
+} from './murdoku/generator.js';
 
 import {
-  chargerModeNotes,
   chargerPartie,
+  sauverPartie,
   chargerRecords,
   chargerTheme,
   enregistrerRecord,
-  sauverModeNotes,
-  sauverPartie,
   sauverTheme,
 } from './storage.js';
 
-/** Pénalité appliquée au chrono pour chaque indice utilisé. */
-const PENALITE_INDICE = 30_000;
+const DIFFICULTIES = [
+  { id: 'debutant', label: 'Débutant', taille: 6, penaliteIndice: 60000 },
+  { id: 'facile', label: 'Facile', taille: 7, penaliteIndice: 90000 },
+  { id: 'intermediaire', label: 'Intermédiaire', taille: 8, penaliteIndice: 120000 },
+];
 
-/** Historique max conservé pour l'annulation (borne la taille du stockage). */
-const TAILLE_HISTORIQUE = 250;
-
-/** Durée d'affichage des cases erronées après « Vérifier », en ms. */
-const DUREE_SIGNALEMENT = 2600;
-
-const elements = {
-  grille: document.getElementById('grille'),
-  chrono: document.getElementById('chrono'),
-  annonce: document.getElementById('annonce'),
-  difficulte: document.getElementById('difficulte'),
+const els = {
+  scene: document.getElementById('scene'),
+  titreAffaire: document.getElementById('titre-affaire'),
+  numeroCase: document.getElementById('numero-case'),
+  labelDifficulte: document.getElementById('label-difficulte'),
+  selectDifficulte: document.getElementById('select-difficulte'),
+  listeSuspects: document.getElementById('liste-suspects'),
+  listeIndices: document.getElementById('liste-indices'),
+  videIndices: document.getElementById('vide-indices'),
   records: document.getElementById('records'),
   voile: document.getElementById('voile'),
-  fin: document.getElementById('fin'),
-  finDetail: document.getElementById('fin-detail'),
-  compteurIndices: document.getElementById('compteur-indices'),
-  compteurErreurs: document.getElementById('compteur-erreurs'),
+  chargement: document.getElementById('chargement'),
+  chrono: document.getElementById('chrono'),
+  annoce: document.getElementById('annonce'),
   boutonPause: document.getElementById('bouton-pause'),
   boutonTheme: document.getElementById('bouton-theme'),
-  boutonNouvelle: document.getElementById('bouton-nouvelle'),
   boutonReprendre: document.getElementById('bouton-reprendre'),
   boutonAnnuler: document.getElementById('bouton-annuler'),
   boutonRetablir: document.getElementById('bouton-retablir'),
   boutonIndice: document.getElementById('bouton-indice'),
   boutonVerifier: document.getElementById('bouton-verifier'),
-  boutonNotes: document.getElementById('bouton-notes'),
-  boutonEffacer: document.getElementById('bouton-effacer'),
+  boutonSoumettre: document.getElementById('bouton-soumettre'),
+  btnOutOutil: [...document.querySelectorAll('.outil')],
+  btnOutSelection: document.getElementById('bouton-outil-selection'),
+  btnOutX: document.getElementById('bouton-outil-x'),
+  btnOutEffacer: document.getElementById('bouton-effacer'),
   themeIcone: document.getElementById('theme-icone'),
-  touchesChiffres: [...document.querySelectorAll('.pave-chiffres .touche')],
-  cases: [],
+  fin: document.getElementById('fin'),
+  finTitre: document.getElementById('fin-titre'),
+  finSousTitre: document.getElementById('fin-sous-titre'),
+  reveal: document.getElementById('reveal'),
+  boutonFermerFin: document.getElementById('bouton-fermer-fin'),
+  boutonNouvelle: document.getElementById('bouton-nouvelle'),
 };
 
-const etat = {
-  puzzle: null, // Uint8Array des indices donnés (0 = vide)
-  grille: null, // Uint8Array de la saisie du joueur
-  solution: null, // Uint8Array, jamais sauvegardé, recalculé au chargement
-  notes: Array.from({ length: 81 }, () => ''), // chiffres candidats par case
-  difficulte: 'facile',
-  selection: 0,
+const state = {
+  affaire: null,
+  difficulty: 'debutant',
+  placements: [],
+  xMarks: new Set(),
+  lettresAffaire: [],
+  selectedPerson: 0,
+  tool: 'personne',
   elapsedMs: 0,
   runningSince: null,
-  indices: 0,
-  erreurs: 0,
-  terminee: false,
   enPause: false,
-  modeNotes: false,
+  terminee: false,
+  meurtrierRevele: false,
   historique: [],
   futur: [],
-  signales: new Set(), // erreurs en cours de signalement
-  revelees: new Set(), // cases révélées par un indice (style permanent)
+  chronoHandle: null,
   theme: 'sombre',
 };
 
-let minuteurSignalement = null;
-let minuteurSauvegarde = null;
-
-/* ------------------------------------------------------------------ */
-/* Outils                                                             */
-/* ------------------------------------------------------------------ */
-
-const maintenant = () => Date.now();
+const now = () => Date.now();
 
 function tempsEcoule() {
-  return etat.elapsedMs + (etat.runningSince === null ? 0 : maintenant() - etat.runningSince);
+  return state.elapsedMs + (state.runningSince === null ? 0 : now() - state.runningSince);
 }
 
-function formatDuration(millisecondes) {
-  const total = Math.max(0, Math.floor(millisecondes / 1000));
+function formatDuration(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
   const heures = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
-  const deuxChiffres = (n) => String(n).padStart(2, '0');
-  const hhmmss = `${deuxChiffres(minutes)}:${deuxChiffres(total % 60)}`;
-  return heures > 0 ? `${heures}:${hhmmss}` : hhmmss;
+  const mm = String(minutes).padStart(2, '0');
+  const ss = String(total % 60).padStart(2, '0');
+  return heures > 0 ? `${heures}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-function annoncer(message) {
-  elements.annonce.textContent = message;
+function annonce(msg) {
+  els.annoce.textContent = msg;
 }
 
-function grilleVersChaine(grille) {
-  return Array.from(grille).join('');
-}
+function diffInfo() { return DIFFICULTIES.find((d) => d.id === state.difficulty) ?? DIFFICULTIES[0]; }
 
-function chaineVersGrille(chaine) {
-  const grille = new Uint8Array(81);
-  for (let index = 0; index < 81; index++) grille[index] = Number(chaine[index]) || 0;
-  return grille;
-}
+function lettres() { return state.affaire.scene.lettres; }
+function N() { return state.affaire.scene.taille; }
 
-function notesVides() {
-  return Array.from({ length: 81 }, () => '');
-}
-
-/** Les 8 cases voisines + la case elle-même, pour le surlignage. */
-function casesAutour(index) {
-  const entourage = new Set();
-  for (let i = 0; i < 9; i++) entourage.add(ROW_OF[index] * 9 + i);
-  for (let i = 0; i < 9; i++) entourage.add(i * 9 + COL_OF[index]);
-  for (let i = 0; i < 9; i++) entourage.add(index - (index % 9) - (index % 3) + i);
-  return entourage;
-}
-
-function etiquette(index, valeur) {
-  const position = `Ligne ${ROW_OF[index] + 1}, colonne ${COL_OF[index] + 1}`;
-  const contenu =
-    valeur === 0
-      ? etat.notes[index]
-        ? `notes ${etat.notes[index].split('').join(' ')}`
-        : 'vide'
-      : `chiffre ${valeur}${etat.puzzle[index] !== 0 ? ', donné' : ''}`;
-  return `${position}, ${contenu}`;
-}
-
-/* ------------------------------------------------------------------ */
-/* Construction de la grille à l'écran                                */
-/* ------------------------------------------------------------------ */
-
-function construireGrille() {
-  const fragment = document.createDocumentFragment();
-
-  for (let rangee = 0; rangee < 9; rangee++) {
-    const ligne = document.createElement('div');
-    ligne.className = 'rangee';
-    ligne.setAttribute('role', 'row');
-
-    for (let colonne = 0; colonne < 9; colonne++) {
-      const index = rangee * 9 + colonne;
-      const case_ = document.createElement('div');
-      case_.className = 'case';
-      case_.setAttribute('role', 'gridcell');
-      case_.dataset.index = String(index);
-      if (rangee % 3 === 2 && rangee !== 8) case_.dataset.blocLigne = 'true';
-      if (colonne % 3 === 2 && colonne !== 8) case_.dataset.blocColonne = 'true';
-
-      const valeur = document.createElement('span');
-      valeur.className = 'valeur';
-
-      const notes = document.createElement('div');
-      notes.className = 'notes';
-      for (let chiffre = 1; chiffre <= 9; chiffre++) {
-        const span = document.createElement('span');
-        span.dataset.chiffre = String(chiffre);
-        span.textContent = String(chiffre);
-        notes.append(span);
-      }
-
-      case_.append(valeur, notes);
-      case_.addEventListener('click', () => selectionner(index));
-      ligne.append(case_);
-      elements.cases.push(case_);
-    }
-
-    fragment.append(ligne);
-  }
-
-  elements.grille.append(fragment);
-}
-
-/* ------------------------------------------------------------------ */
-/* Rendu                                                              */
-/* ------------------------------------------------------------------ */
-
-function rendre() {
-  const entourage = casesAutour(etat.selection);
-  const chiffreSelection = etat.grille[etat.selection];
-
-  for (let index = 0; index < 81; index++) {
-    const case_ = elements.cases[index];
-    const valeur = etat.grille[index];
-    const classes = case_.classList;
-    const spanValeur = case_.firstChild;
-
-    classes.toggle('donne', etat.puzzle[index] !== 0);
-    classes.toggle('saisie', etat.puzzle[index] === 0 && valeur !== 0);
-    classes.toggle('selection', index === etat.selection);
-    classes.toggle('entourage', index !== etat.selection && entourage.has(index));
-    classes.toggle('meme-chiffre', chiffreSelection !== 0 && valeur === chiffreSelection);
-    classes.toggle('erreur', etat.signales.has(index));
-    classes.toggle('indice', etat.revelees.has(index));
-
-    spanValeur.textContent = valeur === 0 ? '' : String(valeur);
-
-    const notes = case_.lastChild;
-    for (const span of notes.children) {
-      span.hidden = !(valeur === 0 && etat.notes[index].includes(span.dataset.chiffre));
-    }
-
-    case_.setAttribute('aria-label', etiquette(index, valeur));
-    case_.setAttribute('aria-selected', String(index === etat.selection));
-  }
-
-  elements.chrono.textContent = formatDuration(tempsEcoule());
-  elements.compteurIndices.textContent = String(etat.indices);
-  elements.compteurErreurs.textContent = String(etat.erreurs);
-
-  elements.boutonAnnuler.disabled = etat.historique.length === 0;
-  elements.boutonRetablir.disabled = etat.futur.length === 0;
-  elements.boutonPause.setAttribute('aria-pressed', String(etat.enPause));
-  elements.boutonNotes.setAttribute('aria-pressed', String(etat.modeNotes));
-  elements.boutonIndice.disabled = etat.terminee;
-  elements.boutonVerifier.disabled = etat.terminee;
-
-  elements.voile.hidden = !etat.enPause;
-  elements.fin.hidden = !etat.terminee;
-  elements.fin.dataset.visible = String(etat.terminee);
-
-  majPave();
-  majRecords();
-}
-
-/** Grise les chiffres déjà posés 9 fois, et marque celui de la case active. */
-function majPave() {
-  const compte = new Array(10).fill(0);
-  for (const valeur of etat.grille) if (valeur !== 0) compte[valeur]++;
-  const caseOccupee = etat.puzzle[etat.selection] !== 0 || etat.grille[etat.selection] !== 0;
-
-  for (const touche of elements.touchesChiffres) {
-    const chiffre = Number(touche.dataset.saisie);
-    const complete = compte[chiffre] >= 9;
-    touche.classList.toggle('est-complete', complete);
-    touche.classList.toggle('est-utilisee', etat.grille[etat.selection] === chiffre);
-    touche.disabled = caseOccupee || complete;
-  }
-}
-
-function majRecords() {
-  const records = chargerRecords();
-  elements.records.replaceChildren();
-  for (const difficulte of DIFFICULTY_ORDER) {
-    const dt = document.createElement('dt');
-    dt.textContent = DIFFICULTIES[difficulte].label;
-    const dd = document.createElement('dd');
-    const temps = records[difficulte];
-    dd.textContent = typeof temps === 'number' ? formatDuration(temps) : '—';
-    elements.records.append(dt, dd);
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Sauvegarde                                                          */
-/* ------------------------------------------------------------------ */
+/* ---------- Sauvegarde ---------- */
 
 function sauvegarder() {
+  if (!state.affaire) return;
   sauverPartie({
     version: 1,
-    difficulte: etat.difficulte,
-    puzzle: grilleVersChaine(etat.puzzle),
-    grille: grilleVersChaine(etat.grille),
-    notes: etat.notes.slice(),
-    elapsedMs: etat.elapsedMs,
-    runningSince: etat.runningSince,
-    enPause: etat.enPause,
-    indices: etat.indices,
-    erreurs: etat.erreurs,
-    terminee: etat.terminee,
-    selection: etat.selection,
-    historique: etat.historique.slice(-TAILLE_HISTORIQUE),
-    futur: etat.futur.slice(-TAILLE_HISTORIQUE),
+    difficulte: state.difficulty,
+    seed: state.affaire.seed,
+    taille: state.affaire.taille,
+    scene: state.affaire.scene,
+    arrangement: state.affaire.arrangement,
+    clues: state.affaire.clues,
+    victime: state.affaire.victime,
+    meurtrier: state.affaire.meurtrier,
+    placements: state.placements.slice(),
+    xMarks: [...state.xMarks],
+    selectionPersonne: state.selectedPerson,
+    historique: state.historique.slice(-200),
+    futur: state.futur.slice(-200),
+    elapsedMs: state.elapsedMs,
+    runningSince: state.runningSince,
+    enPause: state.enPause,
+    terminee: state.terminee,
+    meurtrierRevele: state.meurtrierRevele,
   });
 }
 
+let minuteurSauvegarde = null;
 function sauvegarderDifferé() {
   if (minuteurSauvegarde !== null) return;
   minuteurSauvegarde = window.setTimeout(() => {
@@ -297,450 +137,531 @@ function sauvegarderDifferé() {
   }, 400);
 }
 
-/* ------------------------------------------------------------------ */
-/* Coups                                                              */
-/* ------------------------------------------------------------------ */
+/* ---------- Rendu ---------- */
 
-function enregistrerCoup(index, avant, apres) {
-  etat.historique.push({ index, avant, apres });
-  if (etat.historique.length > TAILLE_HISTORIQUE) etat.historique.shift();
-  etat.futur.length = 0;
+let pieceTable = [];
+
+function reconstruireScene() {
+  const scene = state.affaire.scene;
+  const taille = scene.taille;
+  els.scene.style.setProperty('--cols', String(taille));
+  els.scene.style.setProperty('--lignes', String(taille));
+  els.scene.replaceChildren();
+
+  pieceTable = new Array(taille * taille).fill(-1);
+  for (const piece of scene.pieces) {
+    for (const c of piece.cellules) pieceTable[c] = piece.id;
+  }
+
+  const bloquees = new Set((scene.interdites ?? []).map((i) => i.cellule));
+  const objetParCellule = new Map();
+  for (const o of scene.objets) objetParCellule.set(o.cellule, o);
+
+  for (let index = 0; index < taille * taille; index++) {
+    const cell = document.createElement('div');
+    cell.className = 'cellule';
+    cell.dataset.index = String(index);
+    cell.dataset.piece = String(pieceTable[index] ?? 0);
+    if (bloquees.has(index)) cell.classList.add('bloquee');
+    cell.setAttribute('role', 'gridcell');
+    cell.setAttribute('aria-label', `Case ${Math.floor(index / taille) + 1}-${index % taille + 1}`);
+
+    const interieur = document.createElement('div');
+    interieur.className = 'cellule-interieur';
+
+    const objet = objetParCellule.get(index);
+    if (objet) {
+      const span = document.createElement('span');
+      span.className = 'objet';
+      span.textContent = objet.emoji;
+      span.title = objet.nom;
+      interieur.append(span);
+    }
+
+    const piece = scene.pieces.find((p) => p.id === pieceTable[index]);
+    if (piece) {
+      const lp = document.createElement('span');
+      lp.className = 'label-piece';
+      lp.textContent = piece.nom.split(' ')[0];
+      interieur.append(lp);
+    }
+
+    const badge = document.createElement('div');
+    badge.className = 'badge-personne';
+    badge.hidden = true;
+
+    cell.append(interieur, badge);
+    cell.addEventListener('click', (evt) => {
+      evt.preventDefault();
+      onCelluleClick(index);
+    });
+    els.scene.append(cell);
+  }
+
+  rendre();
 }
 
-const estJouable = () => !etat.terminee && !etat.enPause && etat.puzzle[etat.selection] === 0;
 
-function poserChiffre(chiffre) {
-  if (!estJouable()) return;
-  const index = etat.selection;
-  const avant = { valeur: etat.grille[index], notes: etat.notes[index] };
+function rendre() {
+  if (!state.affaire) return;
+  const scene = state.affaire.scene;
+  const taille = scene.taille;
+  const cells = [...els.scene.children];
+  const pbc = personByCell();
 
-  if (etat.modeNotes) {
-    if (avant.valeur !== 0) {
-      etat.grille[index] = 0;
-      etat.notes[index] = '';
-      enregistrerCoup(index, avant, { valeur: 0, notes: '' });
-    } else {
-      const chiffreTexte = String(chiffre);
-      const notes = avant.notes.includes(chiffreTexte)
-        ? avant.notes.replace(chiffreTexte, '')
-        : [...(avant.notes + chiffreTexte)].sort().join('');
-      etat.notes[index] = notes;
-      enregistrerCoup(index, avant, { valeur: 0, notes });
-      avancer(index);
+  for (let index = 0; index < cells.length; index++) {
+    const cell = cells[index];
+    cell.classList.remove('personne', 'victime', 'x-mark');
+    const badge = cell.querySelector('.badge-personne');
+    badge.hidden = true;
+    badge.classList.remove('victime');
+
+    if (state.xMarks.has(index) && !personByCell().has(index)) cell.classList.add('x-mark');
+
+    if (personByCell().has(index)) {
+      const p = personByCell().get(index);
+      cell.classList.add('personne');
+      if (p === state.affaire.victime) cell.classList.add('victime');
+      badge.hidden = false;
+      badge.textContent = scene.lettres[p];
+      if (p === state.affaire.victime) badge.classList.add('victime');
     }
+  }
+
+  // suspects list state
+  for (let p = 0; p < state.placements.length; p++) {
+    const carte = document.querySelector(`.suspect-carte[data-personne="${p}"]`);
+    if (!carte) return;
+    carte.classList.toggle('selectionne', p === state.selectedPerson);
+    carte.classList.toggle('place', state.placements[p] !== -1);
+  }
+
+  els.chrono.textContent = formatDuration(tempsEcoule());
+  els.boutonSoumettre.disabled = state.placements.some((p) => p === -1) || state.terminee;
+  els.boutonAnnuler.disabled = state.historique.length === 0;
+  els.boutonRetablir.disabled = state.futur.length === 0;
+  els.boutonPause.setAttribute('aria-pressed', String(state.enPause));
+  els.voile.hidden = !state.enPause;
+
+  els.listeSuspects.replaceChildren();
+  construireListeSuspects();
+  chargerListeIndices();
+}
+
+function chargerListeIndices() {
+  els.listeIndices.replaceChildren();
+  let trouve = false;
+  for (const c of (state.affaire.clues ?? [])) {
+    const global = c.masques && c.masques.every((m) => m === null);
+    if (!global) continue;
+    const li = document.createElement('li');
+    li.textContent = c.titre.replace(/^«\s*/, '').replace(/\s*»$/, '');
+    els.listeIndices.append(li);
+    trouve = true;
+  }
+  els.videIndices.hidden = trouve;
+}
+
+function construireListeSuspects() {
+  const affaire = state.affaire;
+  els.listeSuspects.replaceChildren();
+  for (let p = 0; p < affaire.scene.lettres.length; p++) {
+    const indices = (affaire.clues ?? []).filter((c) => c.masques && c.masques[p]);
+    const premiere = indices.length ? indices[0].titre.replace(/^«\\s*/, '').replace(/\\s*»$/, '') : 'Aucun indice direct.';
+    const li = document.createElement('li');
+    const carte = document.createElement('div');
+    carte.className = 'suspect-carte';
+    carte.dataset.personne = String(p);
+    carte.innerHTML = `
+      <div class="badge-personne ${p === affaire.victime ? 'victime' : ''}">${affaire.scene.lettres[p]}</div>
+      <div>
+        <div class="suspect-titre">${affaire.scene.lettres[p]}${p === affaire.victime ? ' <span class="victime-label">Victime</span>' : ''}</div>
+        <p class="suspect-clue">${premiere}</p>
+        ${indices.length > 1 ? `<p class="suspect-clue-plus">+ ${indices.length - 1} indice${indices.length - 1 > 1 ? 's' : ''}</p>` : ''}
+      </div>
+    `;
+    carte.addEventListener('click', () => choisirPersonne(p));
+    li.append(carte);
+    els.listeSuspects.append(li);
+    carte.classList.toggle('selectionne', p === state.selectedPerson);
+    carte.classList.toggle('place', state.placements[p] !== -1);
+  }
+}
+
+function chargerRecordsUI() {
+  const records = chargerRecords();
+  els.records.replaceChildren();
+  for (const d of DIFFICULTIES) {
+    const dt = document.createElement('dt');
+    dt.textContent = d.label;
+    const dd = document.createElement('dd');
+    const t = records[d.id];
+    dd.textContent = typeof t === 'number' ? formatDuration(t) : '—';
+    els.records.append(dt, dd);
+  }
+}
+
+function restaurer(partie) {
+  try {
+    const affaire = {
+      scene: partie.scene,
+      arrangement: partie.arrangement,
+      clues: partie.clues,
+      victime: partie.victime,
+      meurtrier: partie.meurtrier,
+      taille: partie.taille,
+      seed: partie.seed,
+    };
+    state.affaire = affaire;
+    state.difficulty = partie.difficulte;
+    state.placements = (partie.placements ?? []).slice();
+    state.xMarks = new Set(partie.xMarks ?? []);
+    state.selectedPerson = (Number.isInteger(partie.selectionPersonne) ? partie.selectionPersonne : 0);
+    state.elapsedMs = partie.elapsedMs ?? 0;
+    state.runningSince = partie.runningSince ?? null;
+    state.enPause = partie.enPause === true;
+    state.terminee = partie.terminee === true;
+    state.meurtrierRevele = partie.meurtrierRevele === true;
+    state.historique = partie.historique ?? [];
+    state.futur = [];
+    state.lettresAffaire = affaire.scene.lettres;
+
+    els.titreAffaire.textContent = affaire.scene.titre + (state.meurtrierRevele ? ' (résolu)' : '');
+    const di = DIFFICULTIES.find((d) => d.id === state.difficulty) ?? DIFFICULTIES[0];
+    if (els.labelDifficulte) els.labelDifficulte.textContent = di.label;
+    els.selectDifficulte.value = state.difficulty;
+    chargerListeIndices();
+    construireListeSuspects();
+    reconstruireScene();
+
+    if (!state.terminee && !state.enPause && state.runningSince === null) {
+      state.runningSince = now();
+    }
+
+    state.chronoHandle = window.setInterval(() => {
+      if (!state.enPause && !state.terminee && state.runningSince !== null) {
+        els.chrono.textContent = formatDuration(tempsEcoule());
+      }
+    }, 500);
+
+    renderAll();
+    state.chronoHandle = state.chronoHandle;
+    chargerRecordsUI();
+    els.chrono.textContent = formatDuration(tempsEcoule());
+
+    if (state.meurtrierRevele) {
+      const meurtrier = state.lettresAffaire[state.affaire.meurtrier];
+      const victime = state.lettresAffaire[state.affaire.victime];
+      els.reveal.innerHTML = `<strong>Meurtrier : ${meurtrier}</strong><br/>La victime <strong>${victime}</strong> est restée seule avec lui.`;
+      els.finTitre.textContent = `Résolu — ${formatDuration(state.elapsedMs)}`;
+      els.finSousTitre.textContent = '';
+      els.fin.hidden = false;
+    }
+
+    els.voile.hidden = !state.enPause;
+    els.boutonPause.setAttribute('aria-pressed', String(state.enPause));
+  } catch (err) {
+    console.error(err);
+    nouvelleAffaire('debutant');
+  }
+}
+
+function renderAll() {
+  mettreAjourUISelection();
+  els.chrono.textContent = formatDuration(tempsEcoule());
+  mettreAjourValidation();
+}
+
+function mettreAjourOutilsUI() {
+  document.querySelectorAll('.outil').forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool));
+}
+
+function mettreAjourUISelection() {
+  document.querySelectorAll('.suspect-carte').forEach((c) => {
+    const p = Number(c.dataset.personne);
+    c.classList.toggle('selectionne', p === state.selectedPerson);
+    c.classList.toggle('place', state.placements[p] !== -1);
+  });
+}
+
+function mettreAjourValidation() {
+  els.boutonSoumettre.disabled = state.placements.some((p) => p === -1) || state.terminee;
+  els.boutonAnnuler.disabled = state.historique.length === 0;
+  els.boutonRetablir.disabled = true;
+}
+
+function choisirPersonne(p) {
+  state.selectedPerson = p;
+  mettreAjourUISelection();
+}
+
+function onCelluleClick(index) {
+  if (state.terminee || state.enPause) return;
+  const scene = state.affaire.scene;
+  if ((scene.interdites ?? []).some((i) => i.cellule === index)) return;
+
+  const avant = { placements: state.placements.slice(), xMarks: [...state.xMarks] };
+
+  if (state.tool === 'x') {
+    if (state.xMarks.has(index)) state.xMarks.delete(index); else state.xMarks.add(index);
+  } else if (state.tool === 'effacer') {
+    if (state.xMarks.has(index)) state.xMarks.delete(index);
+    for (let p = 0; p < state.placements.length; p++) if (state.placements[p] === index) state.placements[p] = -1;
   } else {
-    // Écrire un chiffre le remplace toujours : une valeur déjà présente est
-    // réécrite, jamais vidée. Vider passe par ⌫ / 0, ce qui évite la
-    // situation piégée d'une case remplie qui se vide sur le même appui.
-    etat.grille[index] = chiffre;
-    etat.notes[index] = '';
-    etat.revelees.delete(index);
-    etat.signales.delete(index);
-    enregistrerCoup(index, avant, { valeur: chiffre, notes: '' });
-    avancer(index);
+    const person = state.selectedPerson;
+    for (let p = 0; p < state.placements.length; p++) if (state.placements[p] === index) state.placements[p] = -1;
+    state.placements[person] = index;
+    state.xMarks.delete(index);
   }
 
-  rendre();
+  state.historique.push(avant);
+  if (state.historique.length > 250) state.historique.shift();
+  state.futur = [];
+
+  mettreAjourOutilsUI();
+  rendreScene();
   sauvegarderDifferé();
-  verifierFin();
+  mettreAjourValidation();
 }
 
-function effacerCase() {
-  if (!estJouable()) return;
-  const index = etat.selection;
-  const avant = { valeur: etat.grille[index], notes: etat.notes[index] };
-  if (avant.valeur === 0 && avant.notes === '') return;
+function rendreScene() {
+  // re-apply classes on existing cellules
+  const cells = [...els.scene.children];
+  const pbCell = personByCell();
+  for (let index = 0; index < cells.length; index++) {
+    const cell = cells[index];
+    cell.classList.remove('personne', 'victime', 'x-mark');
+    const badge = cell.querySelector('.badge-personne');
+    badge.hidden = true;
+    badge.classList.remove('victime');
 
-  etat.grille[index] = 0;
-  etat.notes[index] = '';
-  etat.revelees.delete(index);
-  enregistrerCoup(index, avant, { valeur: 0, notes: '' });
-  rendre();
-  sauvegarderDifferé();
-}
-
-/** Avance le curseur seulement si la case suivante est réellement libre. */
-function avancer(index) {
-  const suivant = (index + 1) % 81;
-  if (etat.puzzle[suivant] === 0 && etat.grille[suivant] === 0) selectionner(suivant);
-}
-
-function selectionner(index) {
-  etat.selection = Math.max(0, Math.min(80, index));
-  rendre();
-}
-
-function annuler() {
-  const coup = etat.historique.pop();
-  if (!coup) return;
-  etat.futur.push(coup);
-  appliquerCoup(coup, coup.avant);
-  annoncer('Coup annulé');
-}
-
-function retablir() {
-  const coup = etat.futur.pop();
-  if (!coup) return;
-  etat.historique.push(coup);
-  appliquerCoup(coup, coup.apres);
-  annoncer('Coup rétabli');
-}
-
-function appliquerCoup(coup, etatCase) {
-  etat.grille[coup.index] = etatCase.valeur;
-  etat.notes[coup.index] = etatCase.notes;
-  etat.revelees.delete(coup.index);
-  etat.signales.clear();
-  selectionner(coup.index);
-  sauvegarderDifferé();
-}
-
-/* ------------------------------------------------------------------ */
-/* Actions de jeu                                                     */
-/* ------------------------------------------------------------------ */
-
-/** Victoire : les 81 cases sont remplies et toutes justes. */
-function estGagne() {
-  if (etat.solution === null) return false;
-  for (let index = 0; index < 81; index++) if (etat.grille[index] !== etat.solution[index]) return false;
-  return true;
-}
-
-function verifierFin() {
-  if (etat.terminee || !estGagne()) return;
-
-  etat.terminee = true;
-  etat.elapsedMs = tempsEcoule();
-  etat.runningSince = null;
-
-  const temps = etat.elapsedMs;
-  // Un temps obtenu avec des indices n'est pas un record honnête.
-  const record = etat.indices === 0 && enregistrerRecord(etat.difficulte, temps);
-  const indices = etat.indices > 0 ? ` · ${etat.indices} indice${etat.indices > 1 ? 's' : ''}` : '';
-
-  elements.finDetail.textContent =
-    `${DIFFICULTIES[etat.difficulte].label} en ${formatDuration(temps)}${indices}` +
-    (record ? ' · nouveau record !' : '');
-
-  annoncer(`Grille résolue en ${formatDuration(temps)}`);
-  rendre();
-  sauvegarder();
-}
-
-function signalerErreurs() {
-  if (etat.terminee) return;
-  let erreurs = 0;
-  etat.signales.clear();
-
-  for (let index = 0; index < 81; index++) {
-    const valeur = etat.grille[index];
-    if (valeur === 0) continue;
-    if (valeur !== etat.solution[index] || hasConflict(etat.grille, index)) {
-      etat.signales.add(index);
-      erreurs++;
+    if (state.xMarks.has(index) && !pbCell.has(index)) cell.classList.add('x-mark');
+    if (pbCell.has(index)) {
+      const p = pbCell.get(index);
+      cell.classList.add('personne');
+      if (p === state.affaire.victime) cell.classList.add('victime');
+      badge.hidden = false;
+      badge.textContent = state.affaire.scene.lettres[p];
+      if (p === state.affaire.victime) badge.classList.add('victime');
     }
   }
+  state.xMarks && state.xMarks; // noop
+  construireListeSuspects();
+  mettreAjourUISelection();
+  mettreAjourValidation();
+  els.chrono.textContent = formatDuration(tempsEcoule());
+}
 
-  etat.erreurs += erreurs;
-  rendre();
+function personByCell() {
+  const m = new Map();
+  for (let p = 0; p < state.placements.length; p++) {
+    if (state.placements[p] !== -1) m.set(state.placements[p], p);
+  }
+  return m;
+}
+
+function undo() {
+  if (!state.historique.length) return;
+  state.futur.push({ placements: state.placements.slice(), xMarks: [...state.xMarks] });
+  const precedent = state.historique.pop();
+  state.placements = precedent.placements.slice();
+  state.xMarks = new Set(precedent.xMarks);
+  rendreScene();
   sauvegarderDifferé();
-  annoncer(
-    erreurs === 0
-      ? 'Aucune erreur pour le moment'
-      : `${erreurs} erreur${erreurs > 1 ? 's' : ''} repérée${erreurs > 1 ? 's' : ''}`,
-  );
+  mettreAjourValidation();
+  annonce('Coup annulé');
+}
 
-  window.clearTimeout(minuteurSignalement);
-  minuteurSignalement = window.setTimeout(() => {
-    etat.signales.clear();
-    rendre();
-  }, DUREE_SIGNALEMENT);
+function redo() {
+  if (!state.futur.length) return;
+  state.historique.push({ placements: state.placements.slice(), xMarks: [...state.xMarks] });
+  const futur = state.futur.pop();
+  state.placements = futur.placements.slice();
+  state.xMarks = new Set(futur.xMarks);
+  rendreScene();
+  sauvegarderDifferé();
+  mettreAjourValidation();
+  annonce('Coup rétabli');
+}
+
+function verifierCases() {
+  const fautes = [];
+  for (let p = 0; p < state.placements.length; p++) {
+    if (state.placements[p] !== state.affaire.arrangement[p]) fautes.push(p);
+  }
+  if (fautes.length === 0) annonce('Toutes les déductions sont correctes.');
+  else annonce(`${fautes.length} placement${fautes.length > 1 ? 's' : ''} à revoir.`);
+}
+
+function soumettre() {
+  if (state.placements.some((p) => p === -1) || state.terminee) return;
+  const fautes = [];
+  for (let p = 0; p < state.placements.length; p++) if (state.placements[p] !== state.affaire.arrangement[p]) fautes.push(p);
+
+  if (fautes.length === 0) {
+    state.terminee = true;
+    state.elapsedMs = tempsEcoule();
+    state.runningSince = null;
+    state.meurtrierRevele = true;
+    enregistrerRecord(state.difficulty, state.elapsedMs);
+
+    els.finTitre.textContent = `Résolu — ${formatDuration(state.elapsedMs)}`;
+    els.finSousTitre.textContent = 'Toutes les déductions étaient justes.';
+    const meurtrier = lettres()[state.affaire.meurtrier];
+    const victime = lettres()[state.affaire.victime];
+    els.reveal.innerHTML = `<strong>Meurtrier : ${meurtrier}</strong><br/>La victime <strong>${victime}</strong> est restée seule avec lui.`;
+    els.fin.hidden = false;
+    annonce(`Affaire résolue en ${formatDuration(state.elapsedMs)}`);
+    sauvegarder();
+  } else {
+    annonce(`${fautes.length} placement${fautes.length > 1 ? 's' : ''} à revoir : ${fautes.map((p) => lettres()[p]).join(', ')}`);
+  }
 }
 
 function donnerIndice() {
-  if (etat.terminee || etat.enPause || etat.solution === null) return;
-
-  // Case vide, sans conflit avec la saisie, et de préférence la plus
-  // contrainte : c'est celle qui apporte le plus d'information.
+  if (state.terminee || state.enPause) return;
+  const affaire = state.affaire;
   let cible = -1;
-  let moinsCandidats = 10;
-
-  for (let index = 0; index < 81; index++) {
-    if (etat.puzzle[index] !== 0 || etat.grille[index] !== 0) continue;
-    if (hasConflict(etat.grille, index)) continue;
-    const candidats = usedDigits(etat.grille, index).filter(Boolean).length;
-    if (candidats < moinsCandidats) {
-      cible = index;
-      moinsCandidats = candidats;
-      if (candidats === 8) break; // case totalement libre : on s'arrête là
-    }
+  for (let p = 0; p < state.placements.length; p++) {
+    if (state.placements[p] === affaire.arrangement[p]) continue;
+    cible = p;
+    break;
   }
-
   if (cible === -1) return;
 
-  const avant = { valeur: etat.grille[cible], notes: etat.notes[cible] };
-  const valeur = etat.solution[cible];
-
-  etat.grille[cible] = valeur;
-  etat.notes[cible] = '';
-  etat.revelees.add(cible);
-  etat.indices += 1;
-  etat.elapsedMs += PENALITE_INDICE;
-  enregistrerCoup(cible, avant, { valeur, notes: '' });
-
-  selectionner(cible);
-  annoncer(`Indice donné ligne ${ROW_OF[cible] + 1}, colonne ${COL_OF[cible] + 1}`);
-  verifierFin();
+  for (let p = 0; p < state.placements.length; p++) if (state.placements[p] === affaire.arrangement[cible]) state.placements[p] = -1;
+  state.placements[cible] = affaire.arrangement[cible];
+  state.elapsedMs += diffInfo().penaliteIndice;
+  els.chrono.textContent = formatDuration(tempsEcoule());
+  annonce(`Indice donné : ${lettres()[cible]} à sa place.`);
+  if (state.placements.every((x) => x !== -1)) soumettre();
+  sauvegarderDifferé();
 }
 
 function basculerPause(force) {
-  if (etat.terminee) return;
-  etat.enPause = typeof force === 'boolean' ? force : !etat.enPause;
-
-  if (etat.enPause) {
-    etat.elapsedMs = tempsEcoule();
-    etat.runningSince = null;
-  } else if (etat.runningSince === null) {
-    etat.runningSince = maintenant();
+  if (state.terminee) return;
+  state.enPause = typeof force === 'boolean' ? force : !state.enPause;
+  if (state.enPause) {
+    state.elapsedMs = tempsEcoule();
+    state.runningSince = null;
+  } else if (state.runningSince === null) {
+    state.runningSince = now();
   }
-
-  rendre();
+  els.voile.hidden = !state.enPause;
+  els.boutonPause.setAttribute('aria-pressed', String(state.enPause));
   sauvegarder();
-  annoncer(etat.enPause ? 'Partie en pause' : 'Reprise de la partie');
+  annoncer(state.enPause ? 'En pause' : 'Reprise');
 }
-
-function nouvellePartie(difficulte = 'facile') {
-  const config = DIFFICULTIES[difficulte] ? difficulte : 'facile';
-  const { puzzle, solution } = generatePuzzle(config);
-
-  etat.puzzle = puzzle;
-  etat.grille = cloneGrid(puzzle);
-  etat.solution = solution;
-  etat.notes = notesVides();
-  etat.difficulte = config;
-  etat.selection = premiereCaseVide();
-  etat.elapsedMs = 0;
-  etat.runningSince = maintenant();
-  etat.indices = 0;
-  etat.erreurs = 0;
-  etat.terminee = false;
-  etat.enPause = false;
-  etat.historique = [];
-  etat.futur = [];
-  etat.signales.clear();
-  etat.revelees.clear();
-
-  window.clearTimeout(minuteurSignalement);
-  elements.difficulte.value = config;
-  rendre();
-  sauvegarder();
-  annoncer(`Nouvelle partie ${DIFFICULTIES[config].label}`);
-}
-
-function premiereCaseVide() {
-  for (let index = 0; index < 81; index++) if (etat.puzzle[index] === 0) return index;
-  return 0;
-}
-
-/* ------------------------------------------------------------------ */
-/* Thème                                                               */
-/* ------------------------------------------------------------------ */
 
 function appliquerTheme(theme) {
-  etat.theme = theme;
+  state.theme = theme;
   document.documentElement.dataset.theme = theme;
-  elements.themeIcone.textContent = theme === 'sombre' ? '☾' : '☀';
+  els.themeIcone.textContent = theme === 'sombre' ? '☾' : '☀';
   sauverTheme(theme);
 }
 
-function basculerTheme() {
-  appliquerTheme(etat.theme === 'sombre' ? 'clair' : 'sombre');
-  annoncer(etat.theme === 'sombre' ? 'Thème sombre' : 'Thème clair');
-}
 
-/* ------------------------------------------------------------------ */
-/* Saisie clavier                                                     */
-/* ------------------------------------------------------------------ */
-
-function deplacer(dRow, dCol) {
-  let row = ROW_OF[etat.selection] + dRow;
-  let col = COL_OF[etat.selection] + dCol;
-  if (row < 0) row = 8;
-  if (row > 8) row = 0;
-  if (col < 0) col = 8;
-  if (col > 8) col = 0;
-  selectionner(row * 9 + col);
-}
-
-function basculerModeNotes() {
-  etat.modeNotes = !etat.modeNotes;
-  sauverModeNotes(etat.modeNotes);
-  rendre();
-  annoncer(etat.modeNotes ? 'Mode notes activé' : 'Mode notes désactivé');
-}
-
-function surToucheClavier(evenement) {
-  if (evenement.ctrlKey && !['z', 'y'].includes(evenement.key.toLowerCase())) return;
-  if (evenement.metaKey || evenement.altKey) return;
-
-  const touche = evenement.key;
-  const surBouton = document.activeElement?.tagName === 'BUTTON';
-
-  // Espace et Entrée activent le bouton focusé : on ne les intercepte pas,
-  // sinon le clavier ne pourrait plus piloter l'interface.
-  if (surBouton && (touche === ' ' || touche === 'Enter')) return;
-
-  if (evenement.ctrlKey) {
-    const raccourci = touche.toLowerCase();
-    if (raccourci === 'z') {
-      evenement.preventDefault();
-      evenement.shiftKey ? retablir() : annuler();
-      return;
-    }
-    if (raccourci === 'y') {
-      evenement.preventDefault();
-      retablir();
-      return;
-    }
-  }
-
-  if (touche >= '1' && touche <= '9') {
-    evenement.preventDefault();
-    poserChiffre(Number(touche));
+function nouvelleAffaire(difficulte = state.difficulty, tente = 0) {
+  if (tente >= 3) {
+    annonce('Impossible de générer une affaire pour cette taille.');
+    els.chargement.hidden = true;
     return;
   }
+  els.chargement.hidden = false;
+  state.difficulty = difficulte;
+  if (els.labelDifficulte) els.labelDifficulte.textContent = (DIFFICULTIES.find((d) => d.id === difficulte) ?? DIFFICULTIES[0]).label;
 
-  switch (touche) {
-    case 'ArrowUp':
-      evenement.preventDefault();
-      deplacer(-1, 0);
-      return;
-    case 'ArrowDown':
-      evenement.preventDefault();
-      deplacer(1, 0);
-      return;
-    case 'ArrowLeft':
-      evenement.preventDefault();
-      deplacer(0, -1);
-      return;
-    case 'ArrowRight':
-      evenement.preventDefault();
-      deplacer(0, 1);
-      return;
-    case 'Backspace':
-    case 'Delete':
-    case '0':
-      evenement.preventDefault();
-      effacerCase();
-      return;
-    case ' ':
-      evenement.preventDefault();
-      basculerModeNotes();
-      return;
-    default:
-      break;
-  }
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      try {
+        const taille = (DIFFICULTIES.find((d) => d.id === difficulte) ?? DIFFICULTIES[0]).taille;
+        const affaire = genererAffaireAuHasard(taille, (Date.now() % 99999) + 1);
+        if (!affaire) {
+          els.chargement.hidden = true;
+          nouvelleAffaire(difficulte, tente + 1);
+          return;
+        }
+        state.affaire = affaire;
+        state.placements = new Array(affaire.scene.lettres.length).fill(-1);
+        state.xMarks = new Set();
+        state.selectedPerson = 0;
+        state.tool = 'personne';
+        state.elapsedMs = 0;
+        state.runningSince = now();
+        state.enPause = false;
+        state.terminee = false;
+        state.meurtrierRevele = false;
+        state.historique = [];
+        state.futur = [];
+        els.titreAffaire.textContent = affaire.scene.titre;
+        els.numeroCase.textContent = 'CAS';
+        els.selectDifficulte.value = difficulte;
+        state.lettresAffaire = affaire.scene.lettres;
 
-  switch (touche.toLowerCase()) {
-    case 'n':
-      basculerModeNotes();
-      break;
-    case 'h':
-      donnerIndice();
-      break;
-    case 'v':
-      signalerErreurs();
-      break;
-    case 'p':
-      basculerPause();
-      break;
-    case 't':
-      basculerTheme();
-      break;
-    default:
-      break;
-  }
-}
+        if (state.chronoHandle !== null) clearInterval(state.chronoHandle);
+        state.chronoHandle = window.setInterval(() => {
+          if (!state.enPause && !state.terminee && state.runningSince !== null) {
+            els.chrono.textContent = formatDuration(tempsEcoule());
+          }
+        }, 500);
 
-/* ------------------------------------------------------------------ */
-/* Démarrage                                                           */
-/* ------------------------------------------------------------------ */
-
-function remplirDifficultes() {
-  for (const difficulte of DIFFICULTY_ORDER) {
-    const option = document.createElement('option');
-    option.value = difficulte;
-    option.textContent = DIFFICULTIES[difficulte].label;
-    elements.difficulte.append(option);
-  }
-}
-
-function restaurer() {
-  const partie = chargerPartie();
-
-  if (!partie) {
-    nouvellePartie(elements.difficulte.value || 'facile');
-    return;
-  }
-
-  etat.puzzle = chaineVersGrille(partie.puzzle);
-  etat.grille = chaineVersGrille(partie.grille);
-  etat.notes =
-    Array.isArray(partie.notes) && partie.notes.length === 81
-      ? partie.notes.map((notes) => (typeof notes === 'string' ? notes : ''))
-      : notesVides();
-  etat.difficulte = DIFFICULTIES[partie.difficulte] ? partie.difficulte : 'facile';
-  etat.elapsedMs = Number(partie.elapsedMs) || 0;
-  etat.runningSince = typeof partie.runningSince === 'number' ? partie.runningSince : null;
-  etat.enPause = partie.enPause === true;
-  etat.indices = Number(partie.indices) || 0;
-  etat.erreurs = Number(partie.erreurs) || 0;
-  etat.terminee = partie.terminee === true;
-  etat.selection = Math.max(0, Math.min(80, Number(partie.selection) || 0));
-  etat.historique = Array.isArray(partie.historique) ? partie.historique : [];
-  etat.futur = Array.isArray(partie.futur) ? partie.futur : [];
-
-  // La solution n'est jamais sauvegardée : le sudoku ayant une solution
-  // unique, le solveur retrouve exactement celle de la partie en cours.
-  etat.solution = solve(etat.puzzle);
-
-  elements.difficulte.value = etat.difficulte;
-  rendre();
+        construireListeSuspects();
+        chargerListeIndices();
+        reconstruireScene();
+        chargerRecordsUI();
+        mettreAjourOutilsUI();
+        els.chargement.hidden = true;
+        els.fin.hidden = true;
+        mettreAjourUISelection();
+        mettreAjourValidation();
+        sauvegarder();
+      } catch (err) {
+        console.error(err);
+        els.chargement.hidden = true;
+        nouvelleAffaire(difficulte, tente + 1);
+      }
+    });
+  });
 }
 
 function brancher() {
-  construireGrille();
-  remplirDifficultes();
+  els.btnOutSelection.addEventListener('click', () => { state.tool = 'personne'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); });
+  els.btnOutX.addEventListener('click', () => { state.tool = 'x'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); });
+  els.btnOutEffacer.addEventListener('click', () => { state.tool = 'effacer'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); });
+
+  els.boutonPause.addEventListener('click', () => basculerPause());
+  els.boutonReprendre.addEventListener('click', () => basculerPause(false));
+  els.boutonTheme.addEventListener('click', () => appliquerTheme(state.theme === 'sombre' ? 'clair' : 'sombre'));
+  els.boutonAnnuler.addEventListener('click', undo);
+  els.boutonRetablir.addEventListener('click', redo);
+  els.boutonIndice.addEventListener('click', donnerIndice);
+  els.boutonVerifier.addEventListener('click', verifierCases);
+  els.boutonSoumettre.addEventListener('click', soumettre);
+  els.boutonNouvelle.addEventListener('click', () => nouvelleAffaire(state.difficulty));
+  els.selectDifficulte.addEventListener('change', (e) => {
+    state.difficulty = e.target.value;
+    nouvelleAffaire(state.difficulty);
+  });
+  els.boutonFermerFin.addEventListener('click', () => { els.fin.hidden = true; });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'p' || e.key === 'P') basculerPause();
+    if (e.key === 't' || e.key === 'T') appliquerTheme(state.theme === 'sombre' ? 'clair' : 'sombre');
+    if (e.key === 'x' || e.key === 'X') { state.tool = 'x'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); }
+    if (e.key === 'Escape') { state.tool = 'personne'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); }
+  });
+
   appliquerTheme(chargerTheme());
-  etat.modeNotes = chargerModeNotes();
-  restaurer();
+  els.selectDifficulte.value = state.difficulty;
 
-  document.addEventListener('keydown', surToucheClavier);
-
-  for (const touche of elements.touchesChiffres) {
-    touche.addEventListener('click', () => poserChiffre(Number(touche.dataset.saisie)));
+  const partie = chargerPartie();
+  if (partie) {
+    restaurer(partie);
+  } else {
+    nouvelleAffaire(state.difficulty);
   }
 
-  elements.boutonEffacer.addEventListener('click', effacerCase);
-  elements.boutonNotes.addEventListener('click', basculerModeNotes);
-  elements.boutonAnnuler.addEventListener('click', annuler);
-  elements.boutonRetablir.addEventListener('click', retablir);
-  elements.boutonIndice.addEventListener('click', donnerIndice);
-  elements.boutonVerifier.addEventListener('click', signalerErreurs);
-  elements.boutonPause.addEventListener('click', () => basculerPause());
-  elements.boutonReprendre.addEventListener('click', () => basculerPause(false));
-  elements.boutonTheme.addEventListener('click', basculerTheme);
-  elements.boutonNouvelle.addEventListener('click', () => nouvellePartie(elements.difficulte.value));
-  elements.difficulte.addEventListener('change', () => nouvellePartie(elements.difficulte.value));
-
-  window.setInterval(() => {
-    if (etat.runningSince !== null && !etat.enPause && !etat.terminee) {
-      elements.chrono.textContent = formatDuration(tempsEcoule());
-    }
-  }, 500);
-
-  window.addEventListener('beforeunload', sauvegarder);
-  window.addEventListener('pagehide', sauvegarder);
+  els.annoce = document.getElementById('annonce');
 }
 
 brancher();

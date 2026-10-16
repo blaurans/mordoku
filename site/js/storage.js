@@ -1,20 +1,12 @@
 /**
  * Mordoku — persistance locale (localStorage).
- *
- * Tout reste dans le navigateur : aucun compte, aucun serveur. Si le stockage
- * est indisponible (mode privé strict, quota, etc.), les fonctions renvoient
- * une valeur par défaut au lieu de lever : le jeu reste jouable, simplement
- * sans reprise.
+ * Tout reste dans le navigateur ; stockage indisponible => repli silencieux.
  */
 
 const CLE_PARTIE = 'mordoku.partie.v1';
 const CLE_RECORDS = 'mordoku.records.v1';
 const CLE_THEME = 'mordoku.theme.v1';
-const CLE_NOTES_MODE = 'mordoku.mode-notes.v1';
 
-const PREFIXE = 'mordoku.';
-
-/** Enveloppe tolérante aux pannes de localStorage. */
 function lire(cle, valeurParDefaut) {
   try {
     const brut = window.localStorage.getItem(cle);
@@ -34,36 +26,17 @@ function ecrire(cle, valeur) {
   }
 }
 
-/** Efface toute la sauvegarde du jeu. */
-function nettoyer() {
-  try {
-    for (const cle of Object.keys(window.localStorage)) {
-      if (cle.startsWith(PREFIXE)) window.localStorage.removeItem(cle);
-    }
-  } catch {
-    /* stockage indisponible : rien à nettoyer */
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Partie en cours                                                    */
-/* ------------------------------------------------------------------ */
-
-/** Charge la partie en cours, ou null si aucune (ou illisible). */
 export function chargerPartie() {
   const partie = lire(CLE_PARTIE, null);
   if (!partie || typeof partie !== 'object') return null;
-  if (typeof partie.puzzle !== 'string' || partie.puzzle.length !== 81) return null;
-  if (typeof partie.grille !== 'string' || partie.grille.length !== 81) return null;
+  if (!partie.scene || typeof partie.seed !== 'number') return null;
   return partie;
 }
 
-/** Enregistre la partie en cours. */
 export function sauverPartie(partie) {
   return ecrire(CLE_PARTIE, partie);
 }
 
-/** Supprime la partie en cours. */
 export function effacerPartie() {
   try {
     window.localStorage.removeItem(CLE_PARTIE);
@@ -72,20 +45,11 @@ export function effacerPartie() {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Records                                                            */
-/* ------------------------------------------------------------------ */
-
-/** Records : { [difficulte]: millisecondes }. */
 export function chargerRecords() {
   const records = lire(CLE_RECORDS, {});
   return records && typeof records === 'object' ? records : {};
 }
 
-/**
- * Enregistre un temps s'il bat le record de la difficulté.
- * @returns {boolean} true si c'est un nouveau record
- */
 export function enregistrerRecord(difficulte, millisecondes) {
   const records = chargerRecords();
   const actuel = records[difficulte];
@@ -95,29 +59,13 @@ export function enregistrerRecord(difficulte, millisecondes) {
   return true;
 }
 
-/* ------------------------------------------------------------------ */
-/* Préférences                                                        */
-/* ------------------------------------------------------------------ */
+const THEMES_VALIDES = ['sombre', 'clair'];
 
-const THEMES = ['sombre', 'clair'];
-
-/** Thème mémorisé, 'sombre' par défaut. */
 export function chargerTheme() {
   const theme = lire(CLE_THEME, 'sombre');
-  return THEMES.includes(theme) ? theme : 'sombre';
+  return THEMES_VALIDES.includes(theme) ? theme : 'sombre';
 }
 
 export function sauverTheme(theme) {
-  ecrire(CLE_THEME, THEMES.includes(theme) ? theme : 'sombre');
+  ecrire(CLE_THEME, THEMES_VALIDES.includes(theme) ? theme : 'sombre');
 }
-
-/** Le mode notes était-il actif la dernière fois ? */
-export function chargerModeNotes() {
-  return lire(CLE_NOTES_MODE, false) === true;
-}
-
-export function sauverModeNotes(actif) {
-  ecrire(CLE_NOTES_MODE, actif === true);
-}
-
-export { nettoyer };
