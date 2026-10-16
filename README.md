@@ -33,7 +33,7 @@ La logique (`site/js/sudoku.js`) est pure et sans dépendance, elle est testée
 avec le runner natif de Node :
 
 ```sh
-node --test tests/
+node --test
 ```
 
 ## Arborescence
