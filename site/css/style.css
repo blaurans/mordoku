@@ -305,24 +305,24 @@ body {
 
 .label-piece {
   position: absolute;
-  left: 50%; bottom: 3px;
-  transform: translateX(-50%);
-  max-width: 94%;
-  text-align: center;
+  inset: 0;
+  display: grid;
+  place-content: end center;
+  margin-bottom: 2px;
+  overflow: visible;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: clamp(0.5rem, 1.9vw, 0.7rem);
+  text-align: center;
+  font-size: clamp(0.55rem, 2vw, 0.72rem);
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0.04em;
-  color: rgb(230 235 242 / 92%);
-  padding: 1px 5px 2px;
-  border-radius: 3px;
-  background: rgb(0 0 0 / 38%);
-  z-index: 0;
+  color: rgb(230 235 242 / 90%);
   pointer-events: none;
-  text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
+  text-shadow: 0 1px 3px rgb(0 0 0 / 90%), 0 0 4px rgb(0 0 0 / 60%);
+}
+html[data-theme='clair'] .label-piece {
+  color: rgb(20 26 34 / 92%);
+  text-shadow: 0 1px 3px rgb(255 255 255 / 95%), 0 0 4px rgb(255 255 255 / 70%);
 }
 html[data-theme='clair'] .label-piece {
   color: rgb(20 26 34 / 92%);

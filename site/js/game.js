@@ -182,7 +182,7 @@ function reconstruireScene() {
     }
 
     const piece = scene.pieces.find((p) => p.id === pieceTable[index]);
-    if (piece) {
+    if (piece && piece.cellules[0] === index) {
       const lp = document.createElement('span');
       lp.className = 'label-piece';
       const mots = piece.nom.split(/\s+/);
