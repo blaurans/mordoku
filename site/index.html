@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="sombre">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mordoku</title>
+    <meta
+      name="description"
+      content="Jeu de sudoku en HTML, CSS et JavaScript. Aucune dépendance, aucun compte."
+    />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="stylesheet" href="css/style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23151a23'/><text y='72' x='50' text-anchor='middle' font-size='62' font-family='monospace' fill='%236ea8fe'>9</text></svg>"
+    />
+  </head>
+  <body>
+    <a class="saut-contenu" href="#grille">Aller à la grille</a>
+
+    <header class="entete">
+      <h1 class="titre">Mordoku</h1>
+      <div class="entete-actions">
+        <span class="chrono" id="chrono" aria-live="off" title="Temps écoulé">00:00</span>
+        <button type="button" id="bouton-pause" class="bouton-icon" aria-pressed="false">
+          <span aria-hidden="true">⏸</span><span class="sr-only">Pause</span>
+        </button>
+        <button type="button" id="bouton-theme" class="bouton-icon">
+          <span aria-hidden="true" id="theme-icone">☾</span>
+          <span class="sr-only">Changer de thème</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="plateau">
+      <section class="colonne-principale">
+        <div class="barre-outils">
+          <label class="champ">
+            <span>Difficulté</span>
+            <select id="difficulte"></select>
+          </label>
+          <button type="button" id="bouton-nouvelle" class="bouton bouton-primaire">
+            Nouvelle partie
+          </button>
+          <div class="compteurs">
+            <span class="compteur" title="Indices utilisés">Indices <b id="compteur-indices">0</b></span>
+            <span class="compteur" title="Erreurs repérées">Erreurs <b id="compteur-erreurs">0</b></span>
+          </div>
+        </div>
+
+        <div class="zone-grille">
+          <div
+            id="grille"
+            class="grille"
+            role="grid"
+            aria-label="Grille de sudoku 9 sur 9"
+            aria-rowcount="9"
+            aria-colcount="9"
+          ></div>
+
+          <div id="voile" class="voile" hidden>
+            <div class="voile-boite">
+              <p class="voile-titre">En pause</p>
+              <button type="button" id="bouton-reprendre" class="bouton bouton-primaire">
+                Reprendre
+              </button>
+            </div>
+          </div>
+
+          <div id="fin" class="fin" role="status" hidden>
+            <p class="fin-titre">Grille résolue 🎉</p>
+            <p class="fin-detail" id="fin-detail"></p>
+          </div>
+        </div>
+
+        <div class="barre-saisie">
+          <div class="pave" role="group" aria-label="Pavé numérique">
+            <div class="pave-chiffres">
+              <button type="button" class="touche" data-saisie="1">1</button>
+              <button type="button" class="touche" data-saisie="2">2</button>
+              <button type="button" class="touche" data-saisie="3">3</button>
+              <button type="button" class="touche" data-saisie="4">4</button>
+              <button type="button" class="touche" data-saisie="5">5</button>
+              <button type="button" class="touche" data-saisie="6">6</button>
+              <button type="button" class="touche" data-saisie="7">7</button>
+              <button type="button" class="touche" data-saisie="8">8</button>
+              <button type="button" class="touche" data-saisie="9">9</button>
+            </div>
+            <div class="pave-actions">
+              <button type="button" id="bouton-notes" class="touche touche-notes" aria-pressed="false">
+                Notes
+              </button>
+              <button type="button" id="bouton-effacer" class="touche">
+                <span aria-hidden="true">⌫</span><span class="sr-only">Effacer</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="barre-outils-secondaires">
+            <button type="button" id="bouton-annuler" class="bouton" disabled>Annuler</button>
+            <button type="button" id="bouton-retablir" class="bouton" disabled>Rétablir</button>
+            <button type="button" id="bouton-indice" class="bouton">Indice</button>
+            <button type="button" id="bouton-verifier" class="bouton">Vérifier</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="colonne-cote">
+        <section class="carte">
+          <h2>Records</h2>
+          <dl id="records" class="records"></dl>
+        </section>
+
+        <section class="carte">
+          <h2>Raccourcis</h2>
+          <ul class="raccourcis">
+            <li><kbd>1</kbd>–<kbd>9</kbd> poser un chiffre</li>
+            <li><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> se déplacer</li>
+            <li><kbd>N</kbd> mode notes</li>
+            <li><kbd>⌫</kbd> effacer la case</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler</li>
+            <li><kbd>H</kbd> indice · <kbd>V</kbd> vérifier</li>
+            <li><kbd>P</kbd> pause · <kbd>T</kbd> thème</li>
+          </ul>
+        </section>
+      </aside>
+    </main>
+
+    <div id="annonce" class="sr-only" role="status" aria-live="polite"></div>
+
+    <script type="module" src="js/game.js"></script>
+  </body>
+</html>
