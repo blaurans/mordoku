@@ -36,6 +36,18 @@ avec le runner natif de Node :
 node --test
 ```
 
+L'interface est vérifiée par un harnais qui pilote un Chromium headless via
+le protocole DevTools, sans aucune dépendance npm :
+
+```sh
+chromium --headless=new --no-sandbox --remote-debugging-port=9222 \
+         --user-data-dir=/tmp/mordoku-chrome about:blank &
+MORDOKU_URL=https://mordoku.laurans.org/ node tests/e2e.mjs
+```
+
+`tests/e2e.mjs` vide le localStorage de l'origine visée : ne pas le lancer
+depuis un profil contenant une partie en cours. Détails dans `handoff.md`.
+
 ## Arborescence
 
 ```
@@ -44,7 +56,8 @@ mordoku/
 │   ├── index.html
 │   ├── css/style.css
 │   └── js/{sudoku,storage,game}.js
-├── tests/           tests node --test (hors ligne web)
+├── tests/           tests unitaires (node --test) et tests d'interface
+├── deploy/          extraits Caddy/compose appliqués sur le serveur
 ├── handoff.md       contexte de reprise / déploiement
 └── README.md
 ```
