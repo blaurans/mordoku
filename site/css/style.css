@@ -487,3 +487,24 @@ html[data-theme='clair'] .label-piece { color: rgb(0 0 0 / 30%); }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+/* candidates markers (possibles) */
+.cellule.has-candidat .cand-badges { display: flex !important; }
+.cellule .cand-badges {
+  display: none;
+  position: absolute;
+  left: 4px; bottom: 3px;
+  gap: 2px;
+  z-index: 3;
+  pointer-events: none;
+}
+.cellule .cand-badges .cand {
+  font-size: 0.55rem;
+  font-weight: 700;
+  font-family: var(--police-mono);
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+  opacity: 0.85;
+}

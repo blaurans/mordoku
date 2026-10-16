@@ -63,9 +63,10 @@
         <section class="carte">
           <h2>Actions</h2>
           <div class="actions-grille">
-            <button type="button" id="bouton-outil-selection" class="outil actif">Personne</button>
-            <button type="button" id="bouton-outil-x" class="outil">X</button>
-            <button type="button" id="bouton-effacer" class="outil">Effacer</button>
+            <button type="button" id="bouton-outil-selection" data-outil="personne" class="outil actif">Personne</button>
+            <button type="button" id="bouton-outil-x" data-outil="x" class="outil">X</button>
+            <button type="button" id="bouton-outil-cand" data-outil="candidat" class="outil">Possible</button>
+            <button type="button" id="bouton-effacer" data-outil="effacer" class="outil">Effacer</button>
           </div>
           <div class="actions-finales">
             <button type="button" id="bouton-annuler" class="bouton" disabled>Annuler</button>

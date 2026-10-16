@@ -48,6 +48,7 @@ const els = {
   btnOutOutil: [...document.querySelectorAll('.outil')],
   btnOutSelection: document.getElementById('bouton-outil-selection'),
   btnOutX: document.getElementById('bouton-outil-x'),
+  btnOutCand: document.getElementById('bouton-outil-cand'),
   btnOutEffacer: document.getElementById('bouton-effacer'),
   themeIcone: document.getElementById('theme-icone'),
   fin: document.getElementById('fin'),
@@ -63,6 +64,7 @@ const state = {
   difficulty: 'debutant',
   placements: [],
   xMarks: new Set(),
+  candidats: [],
   lettresAffaire: [],
   selectedPerson: 0,
   tool: 'personne',
@@ -117,6 +119,7 @@ function sauvegarder() {
     meurtrier: state.affaire.meurtrier,
     placements: state.placements.slice(),
     xMarks: [...state.xMarks],
+    candidats: snapCandidats(state.candidats),
     selectionPersonne: state.selectedPerson,
     historique: state.historique.slice(-200),
     futur: state.futur.slice(-200),
@@ -190,7 +193,11 @@ function reconstruireScene() {
     badge.className = 'badge-personne';
     badge.hidden = true;
 
-    cell.append(interieur, badge);
+    const candBadges = document.createElement('div');
+    candBadges.className = 'cand-badges';
+    candBadges.hidden = true;
+
+    cell.append(interieur, badge, candBadges);
     cell.addEventListener('click', (evt) => {
       evt.preventDefault();
       onCelluleClick(index);
@@ -316,6 +323,9 @@ function restaurer(partie) {
     state.difficulty = partie.difficulte;
     state.placements = (partie.placements ?? []).slice();
     state.xMarks = new Set(partie.xMarks ?? []);
+    state.candidats = Array.from({ length: (partie.scene?.lettres?.length ?? 0) }, (_, i) =>
+      Array.isArray(partie.candidats?.[i]) ? partie.candidats[i].slice() : [],
+    );
     state.selectedPerson = (Number.isInteger(partie.selectionPersonne) ? partie.selectionPersonne : 0);
     state.elapsedMs = partie.elapsedMs ?? 0;
     state.runningSince = partie.runningSince ?? null;
@@ -400,18 +410,41 @@ function onCelluleClick(index) {
   const scene = state.affaire.scene;
   if ((scene.interdites ?? []).some((i) => i.cellule === index)) return;
 
-  const avant = { placements: state.placements.slice(), xMarks: [...state.xMarks] };
+  const avant = {
+    placements: state.placements.slice(),
+    xMarks: [...state.xMarks],
+    candidats: snapCandidats(state.candidats),
+  };
 
   if (state.tool === 'x') {
     if (state.xMarks.has(index)) state.xMarks.delete(index); else state.xMarks.add(index);
+    if (!state.xMarks.has(index)) {
+      if (!state.candidats[index]) state.candidats[index] = [];
+    } else if (state.candidats[index]) {
+      state.candidats[index] = [];
+    }
   } else if (state.tool === 'effacer') {
     if (state.xMarks.has(index)) state.xMarks.delete(index);
-    for (let p = 0; p < state.placements.length; p++) if (state.placements[p] === index) state.placements[p] = -1;
+    for (let pp = 0; pp < state.placements.length; pp++) if (state.placements[pp] === index) state.placements[pp] = -1;
+    if (state.candidats[index]) state.candidats[index] = [];
+  } else if (state.tool === 'candidat') {
+    const person = state.selectedPerson;
+    if (!state.candidats[index]) state.candidats[index] = [];
+    const set = state.candidats[index];
+    const i = set.indexOf(person);
+    if (i === -1) set.push(person); else set.splice(i, 1);
   } else {
     const person = state.selectedPerson;
-    for (let p = 0; p < state.placements.length; p++) if (state.placements[p] === index) state.placements[p] = -1;
+    for (let pp = 0; pp < state.placements.length; pp++) if (state.placements[pp] === index) state.placements[pp] = -1;
     state.placements[person] = index;
     state.xMarks.delete(index);
+    if (state.candidats[index]) state.candidats[index] = [];
+    for (let c = 0; c < state.candidats.length; c++) {
+      if (Array.isArray(state.candidats[c])) {
+        const i = state.candidats[c].indexOf(person);
+        if (i !== -1) state.candidats[c].splice(i, 1);
+      }
+    }
   }
 
   state.historique.push(avant);
@@ -424,27 +457,48 @@ function onCelluleClick(index) {
   mettreAjourValidation();
 }
 
+function snapCandidats(arr) {
+  return arr.map((c) => (Array.isArray(c) ? c.slice() : []));
+}
+
 function rendreScene() {
   // re-apply classes on existing cellules
   const cells = [...els.scene.children];
   const pbCell = personByCell();
   for (let index = 0; index < cells.length; index++) {
     const cell = cells[index];
-    cell.classList.remove('personne', 'victime', 'x-mark');
+    cell.classList.remove('personne', 'victime', 'x-mark', 'has-candidat');
     const badge = cell.querySelector('.badge-personne');
     badge.hidden = true;
     badge.classList.remove('victime');
+    const candBadges = cell.querySelector('.cand-badges');
+    if (candBadges) { candBadges.replaceChildren(); candBadges.hidden = true; }
 
     if (state.xMarks.has(index) && !pbCell.has(index)) cell.classList.add('x-mark');
     if (pbCell.has(index)) {
-      const p = pbCell.get(index);
+      const pp = pbCell.get(index);
       cell.classList.add('personne');
-      if (p === state.affaire.victime) cell.classList.add('victime');
+      if (pp === state.affaire.victime) cell.classList.add('victime');
       badge.hidden = false;
-      badge.textContent = state.affaire.scene.lettres[p];
-      if (p === state.affaire.victime) badge.classList.add('victime');
+      badge.textContent = state.affaire.scene.lettres[pp];
+      if (pp === state.affaire.victime) badge.classList.add('victime');
+    } else {
+      const candidats = state.candidats[index] ?? [];
+      if (candidats.length) {
+        cell.classList.add('has-candidat');
+        if (candBadges) {
+          candBadges.hidden = false;
+          for (const pp of candidats) {
+            const span = document.createElement('span');
+            span.className = 'cand';
+            span.dataset.personne = String(pp);
+            span.textContent = state.affaire.scene.lettres[pp];
+            candBadges.append(span);
+          }
+        }
+      }
     }
-  }
+  }  
   state.xMarks && state.xMarks; // noop
   construireListeSuspects();
   mettreAjourUISelection();
@@ -462,10 +516,11 @@ function personByCell() {
 
 function undo() {
   if (!state.historique.length) return;
-  state.futur.push({ placements: state.placements.slice(), xMarks: [...state.xMarks] });
+  state.futur.push({ placements: state.placements.slice(), xMarks: [...state.xMarks], candidats: snapCandidats(state.candidats) });
   const precedent = state.historique.pop();
   state.placements = precedent.placements.slice();
   state.xMarks = new Set(precedent.xMarks);
+  state.candidats = snapCandidats(precedent.candidats ?? []);
   rendreScene();
   sauvegarderDifferé();
   mettreAjourValidation();
@@ -474,10 +529,11 @@ function undo() {
 
 function redo() {
   if (!state.futur.length) return;
-  state.historique.push({ placements: state.placements.slice(), xMarks: [...state.xMarks] });
+  state.historique.push({ placements: state.placements.slice(), xMarks: [...state.xMarks], candidats: snapCandidats(state.candidats) });
   const futur = state.futur.pop();
   state.placements = futur.placements.slice();
   state.xMarks = new Set(futur.xMarks);
+  state.candidats = snapCandidats(futur.candidats ?? []);
   rendreScene();
   sauvegarderDifferé();
   mettreAjourValidation();
@@ -583,6 +639,7 @@ function nouvelleAffaire(difficulte = state.difficulty, tente = 0) {
         }
         state.affaire = affaire;
         state.placements = new Array(affaire.scene.lettres.length).fill(-1);
+        state.candidats = Array.from({ length: affaire.scene.lettres.length }, () => []);
         state.xMarks = new Set();
         state.selectedPerson = 0;
         state.tool = 'personne';
@@ -628,6 +685,7 @@ function brancher() {
   els.btnOutSelection.addEventListener('click', () => { state.tool = 'personne'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); });
   els.btnOutX.addEventListener('click', () => { state.tool = 'x'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); });
   els.btnOutEffacer.addEventListener('click', () => { state.tool = 'effacer'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); });
+  els.btnOutCand.addEventListener('click', () => { state.tool = 'candidat'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); });
 
   els.boutonPause.addEventListener('click', () => basculerPause());
   els.boutonReprendre.addEventListener('click', () => basculerPause(false));
@@ -648,6 +706,7 @@ function brancher() {
     if (e.key === 'p' || e.key === 'P') basculerPause();
     if (e.key === 't' || e.key === 'T') appliquerTheme(state.theme === 'sombre' ? 'clair' : 'sombre');
     if (e.key === 'x' || e.key === 'X') { state.tool = 'x'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); }
+    if (e.key === 'c' || e.key === 'C') { state.tool = 'candidat'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); }
     if (e.key === 'Escape') { state.tool = 'personne'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); }
   });
 
