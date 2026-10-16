@@ -207,7 +207,31 @@ function reconstruireScene() {
     els.scene.append(cell);
   }
 
+  requestAnimationFrame(() => stabiliserPièces());
   rendre();
+}
+
+function stabiliserPièces() {
+  if (!state.affaire) return;
+  const cells = [...els.scene.children];
+  const tableau = pieceTable;
+  // On force l'affichage sur la première case et on calcule la largeur
+  // matérielle de la pièce pour que les longs noms soient coupés par le
+  // navigateur au bon endroit (wrap) au lieu de déborder sans limite.
+  for (const piece of state.affaire.scene.pieces) {
+    const premiere = cells[piece.cellules[0]];
+    if (!premiere) continue;
+    const lp = premiere.querySelector('.label-piece');
+    if (!lp) continue;
+    const cellRect = premiere.getBoundingClientRect();
+    const taillePiece = (Math.max(...piece.cellules.map((c) => c % state.affaire.scene.taille)) - Math.min(...piece.cellules.map((c) => c % state.affaire.scene.taille)) + 1);
+    const largeur = Math.max(1, taillePiece);
+    lp.style.maxWidth = `${Math.max(40, cellRect.width * largeur - 4)}px`;
+    lp.style.whiteSpace = 'normal';
+    lp.style.wordBreak = 'break-word';
+    lp.style.overflowWrap = 'break-word';
+    lp.style.textAlign = 'center';
+  }
 }
 
 
