@@ -305,16 +305,30 @@ body {
 
 .label-piece {
   position: absolute;
-  right: 3px; bottom: 2px;
-  font-size: 0.55rem;
-  font-weight: 600;
-  color: rgb(255 255 255 / 40%);
-  letter-spacing: 0.05em;
+  left: 50%; bottom: 3px;
+  transform: translateX(-50%);
+  max-width: 94%;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: clamp(0.5rem, 1.9vw, 0.7rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: rgb(230 235 242 / 92%);
+  padding: 1px 5px 2px;
+  border-radius: 3px;
+  background: rgb(0 0 0 / 38%);
   z-index: 0;
   pointer-events: none;
-  text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 }
-html[data-theme='clair'] .label-piece { color: rgb(0 0 0 / 30%); }
+html[data-theme='clair'] .label-piece {
+  color: rgb(20 26 34 / 92%);
+  background: rgb(255 255 255 / 50%);
+  text-shadow: 0 1px 2px rgb(255 255 255 / 80%);
+}
 
 /* coloriage par pièce */
 .cellule[data-piece] { --piece: 0; }

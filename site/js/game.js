@@ -185,7 +185,9 @@ function reconstruireScene() {
     if (piece) {
       const lp = document.createElement('span');
       lp.className = 'label-piece';
-      lp.textContent = piece.nom.split(' ')[0];
+      const mots = piece.nom.split(/\s+/);
+      const rang = (mots[0] === 'LE' || mots[0] === 'LA' || mots[0] === 'LES' || mots[0] === "L'") ? 1 : 0;
+      lp.textContent = mots.slice(rang).join(' ');
       interieur.append(lp);
     }
 
