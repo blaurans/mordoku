@@ -1,0 +1,31 @@
+# Extrait de /app/guacamole/Caddyfile sur ociub (référence, ne pas coller tel
+# quel : c'est un document de comparaison, le fichier réel est sur le serveur).
+
+mordoku.laurans.org {
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		# Contenu non fingerprinte : on laisse le navigateur revalider
+		# (ETag / Last-Modified) au lieu de servir une version périmée.
+		Cache-Control "no-cache"
+		-Server
+	}
+
+	# Site statique : le dossier site/ du dépôt est monté en lecture seule
+	# dans le conteneur Caddy (voir docker-compose.yml). Aucune compilation,
+	# un `git pull` sur le serveur suffit à publier la version suivante.
+	root * /srv/mordoku
+	file_server
+
+	log {
+		output file /data/mordoku-access.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+		format json
+	}
+}

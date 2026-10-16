@@ -1,0 +1,12 @@
+# Ligne ajoutée au service `caddy` de /app/guacamole/docker-compose.yml sur
+# ociub (référence ; le fichier réel est sur le serveur).
+#
+# Rappel : ajouter un montage exige de recréer le conteneur
+#   cd /app/guacamole && sudo docker compose up -d --no-deps caddy
+# ce qui coupe le TLS quelques secondes sur TOUS les vhosts, bastion
+# compris. Le Caddyfile, lui, est un bind mount : une édition + un
+# `caddy reload` suffit et ne coupe rien.
+
+      # Mordoku (https://mordoku.laurans.org) : site statique servi en direct
+      # par file_server. Montage en lecture seule, aucun build.
+      - /app/mordoku/site:/srv/mordoku:ro
