@@ -113,6 +113,9 @@
         <div class="espaceur"></div>
 
         <button type="button" id="bouton-aide" class="outil-moyen">Comment jouer</button>
+        <button type="button" id="bouton-solution" class="outil-moyen outil-solution">
+          Solution
+        </button>
         <dl class="records" id="records"></dl>
       </aside>
     </div>
@@ -156,6 +159,45 @@
         <div class="fin-actions">
           <button type="button" class="bouton" id="bouton-revoir">Revoir la scène</button>
           <button type="button" class="bouton bouton-primaire" id="bouton-nouvelle">Nouvelle affaire</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ Solution (protégée) ============ -->
+    <div id="solution" class="modale" role="dialog" aria-modal="true" aria-labelledby="titre-solution" hidden>
+      <div class="modale-boite modale-solution">
+        <button type="button" class="bouton-fermer" id="bouton-fermer-solution" aria-label="Fermer">×</button>
+
+        <div id="solution-verrou">
+          <h2 id="titre-solution">Voir la solution</h2>
+          <p>
+            Cette section est réservée. Le raisonnement complet et la
+            position de chacun te seront affichés.
+          </p>
+          <form id="formulaire-mdp" class="champ-mdp">
+            <label for="motdepasse">Mot de passe</label>
+            <input
+              type="password"
+              id="motdepasse"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="••••"
+            />
+            <button type="submit" class="bouton bouton-primaire">Ouvrir</button>
+          </form>
+          <p class="message-erreur" id="message-mdp" hidden>Mot de passe incorrect.</p>
+          <p class="note-honnete">
+            Le jeu fonctionne entièrement dans le navigateur : ce mot de passe
+            n'est qu'un garde-fou, il n'offre aucune sécurité réelle.
+          </p>
+        </div>
+
+        <div id="solution-contenu" hidden>
+          <h2>Solution de l'affaire</h2>
+          <div class="bloc-raisonnement" id="raisonnement"></div>
+          <h3>Position de chacun</h3>
+          <ol class="liste-solution" id="liste-solution"></ol>
+          <p class="reveal" id="reveal-solution"></p>
         </div>
       </div>
     </div>

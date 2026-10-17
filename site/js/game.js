@@ -5,6 +5,7 @@
 
 import { genererAffaireAuHasard } from './murdoku/generator.js';
 import { enrichir } from './murdoku/clues.js';
+import { deduire } from './murdoku/solution.js';
 
 import {
   chargerPartie,
@@ -54,6 +55,17 @@ const els = {
   boutonFermerFin: document.getElementById('bouton-fermer-fin'),
   boutonNouvelle: document.getElementById('bouton-nouvelle'),
   boutonRevoir: document.getElementById('bouton-revoir'),
+  boutonSolution: document.getElementById('bouton-solution'),
+  solution: document.getElementById('solution'),
+  boutonFermerSolution: document.getElementById('bouton-fermer-solution'),
+  solutionVerrou: document.getElementById('solution-verrou'),
+  solutionContenu: document.getElementById('solution-contenu'),
+  formulaireMdp: document.getElementById('formulaire-mdp'),
+  motdepasse: document.getElementById('motdepasse'),
+  messageMdp: document.getElementById('message-mdp'),
+  raisonnement: document.getElementById('raisonnement'),
+  listeSolution: document.getElementById('liste-solution'),
+  revealSolution: document.getElementById('reveal-solution'),
 };
 
 /** Portraits : un par suspect, tirés une fois pour l'affaire. */
@@ -132,6 +144,8 @@ function sauvegarder() {
     meurtrierRevele: state.meurtrierRevele,
   });
 }
+
+let solutionOuverte = false;
 
 let minuteurSauvegarde = null;
 function sauvegarderDifferé() {
@@ -850,6 +864,22 @@ function brancher() {
   els.boutonRevoir.addEventListener('click', () => { els.fin.hidden = true; });
   els.boutonFermerFin.addEventListener('click', () => { els.fin.hidden = true; });
   els.boutonAide.addEventListener('click', () => { els.aide.hidden = false; });
+  els.boutonSolution.addEventListener('click', ouvrirSectionSolution);
+  els.boutonFermerSolution.addEventListener('click', () => { els.solution.hidden = true; });
+  els.solution.addEventListener('click', (e) => { if (e.target === els.solution) els.solution.hidden = true; });
+  els.formulaireMdp.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (empreinte(els.motdepasse.value) === EMPREINTE_MDP) {
+      solutionOuverte = true;
+      els.messageMdp.hidden = true;
+      els.solutionVerrou.hidden = true;
+      els.solutionContenu.hidden = false;
+      afficherSolution();
+    } else {
+      els.messageMdp.hidden = false;
+      els.motdepasse.select();
+    }
+  });
   els.boutonFermerAide.addEventListener('click', () => { els.aide.hidden = true; });
   els.aide.addEventListener('click', (e) => { if (e.target === els.aide) els.aide.hidden = true; });
 
@@ -888,3 +918,95 @@ function brancher() {
 }
 
 brancher();
+/* ------------------------------------------------------------------ */
+/* Section « solution », protégée par mot de passe                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Empreinte du mot de passe (djb2). Ce n'est PAS du chiffrement : le
+ * jeu tourne entièrement dans le navigateur, et quiconque ouvre les
+ * outils de développement voit ce fichier. Le but est d'éviter que le
+ * mot de passe saute aux yeux et d'en faire un garde-fou, pas un verrou.
+ */
+const EMPREINTE_MDP = (() => {
+  const secret = ['md', 'p'].join('');
+  let h = 5381;
+  for (let i = 0; i < secret.length; i++) h = ((h * 33) ^ secret.charCodeAt(i)) >>> 0;
+  return h;
+})();
+
+function empreinte(texte) {
+  let h = 5381;
+  for (let i = 0; i < texte.length; i++) h = ((h * 33) ^ texte.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+function ouvrirSectionSolution() {
+  els.solution.hidden = false;
+  if (!solutionOuverte) {
+    els.solutionVerrou.hidden = false;
+    els.solutionContenu.hidden = true;
+    els.motdepasse.value = '';
+    els.motdepasse.focus();
+  }
+}
+
+function afficherSolution() {
+  const affaire = state.affaire;
+  const scene = affaire.scene;
+  const deduction = deduire(scene, affaire.clues, affaire.arrangement);
+
+  // Raisonnement : uniquement les étapes prouvées, dans l'ordre.
+  els.raisonnement.replaceChildren();
+  if (deduction.etapes.length === 0) {
+    const vide = document.createElement('p');
+    vide.className = 'avertissement';
+    vide.textContent =
+      "Aucune déduction isolée n'est évidente dès le départ : il faut combiner plusieurs indices à la fois.";
+    els.raisonnement.append(vide);
+  } else {
+    if (!deduction.complet) {
+      const avert = document.createElement('p');
+      avert.className = 'avertissement';
+      avert.textContent =
+        `${deduction.etapes.length} position${deduction.etapes.length > 1 ? 's' : ''} ` +
+        `se dédui${deduction.etapes.length > 1 ? 'sent' : 't'} directement. ` +
+        `La fin de l'affaire demande ensuite de combiner plusieurs indices ` +
+        `simultanément : je ne l'explique pas ici plutôt que d'inventer ` +
+        `un raisonnement qui ne serait pas vérifiable.`;
+      els.raisonnement.append(avert);
+    }
+    const liste = document.createElement('ol');
+    for (const etape of deduction.etapes) {
+      const li = document.createElement('li');
+      const tag = document.createElement('span');
+      tag.className = 'etiquette-regle';
+      tag.textContent = etape.explicationCourte;
+      li.append(tag, document.createTextNode(etape.raison));
+      liste.append(li);
+    }
+    els.raisonnement.append(liste);
+  }
+
+  // Position finale de chacun.
+  els.listeSolution.replaceChildren();
+  for (let p = 0; p < scene.noms.length; p++) {
+    const cellule = affaire.arrangement[p];
+    const N = scene.taille;
+    const li = document.createElement('li');
+    const nom = document.createElement('strong');
+    nom.textContent = scene.noms[p];
+    li.append(
+      nom,
+      document.createTextNode(
+        ` — ligne ${Math.floor(cellule / N) + 1}, colonne ${(cellule % N) + 1}` +
+          (p === affaire.victime ? ' (victime)' : ''),
+      ),
+    );
+    els.listeSolution.append(li);
+  }
+
+  els.revealSolution.innerHTML =
+    `<strong>Meurtrier : ${scene.noms[affaire.meurtrier]}</strong><br/>` +
+    `${scene.noms[affaire.victime]} est restée seule avec lui dans la même zone.`;
+}
