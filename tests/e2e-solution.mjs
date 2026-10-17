@@ -25,6 +25,9 @@ ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.meth
 await pause(1500);
 await ev('localStorage.clear()');
 await send('Page.navigate', { url: BASE });
+// Au premier lancement le jeu affiche l'accueil : on choisit une affaire.
+await pause(1200);
+await ev(`document.querySelector('#accueil [data-difficulte]').click()`);
 await pause(9000);
 
 const ko = [];

@@ -40,6 +40,9 @@
             <option value="intermediaire">Intermédiaire (7×7)</option>
           </select>
         </label>
+        <button type="button" id="bouton-accueil" class="carre" title="Changer d'affaire (A)">
+          <span aria-hidden="true">☰</span><span class="sr-only">Changer d’affaire</span>
+        </button>
         <button type="button" id="bouton-pause" class="carre" aria-pressed="false" title="Pause (P)">
           <span aria-hidden="true">❚❚</span><span class="sr-only">Pause</span>
         </button>
@@ -147,6 +150,40 @@
           <li><kbd>P</kbd> pause · <kbd>T</kbd> thème · <kbd>H</kbd> indice</li>
         </ul>
         <button type="button" id="bouton-fermer-aide" class="bouton bouton-primaire">Fermer</button>
+      </div>
+    </div>
+
+    <!-- ============ Accueil : au choix ou sur demande ============ -->
+    <div id="accueil" class="modale" role="dialog" aria-modal="true" aria-labelledby="titre-accueil" hidden>
+      <div class="modale-boite modale-accueil">
+        <h2 id="titre-accueil">Choisis ton affaire</h2>
+
+        <section class="bloc-accueil">
+          <h3>Apprendre, étape par étape</h3>
+          <p class="accueil-note">
+            Six dossiers vérifiés, du plus simple au plus exigeant. Chacun se
+            résout entièrement par déduction : la solution explique chaque étape.
+          </p>
+          <ol class="liste-cas" id="liste-cas"></ol>
+        </section>
+
+        <section class="bloc-accueil">
+          <h3>Ou une affaire au hasard</h3>
+          <p class="accueil-note">
+            Générée à l'instant, vérifiée unique. La solution n'explique que ce
+            qui se déduit d'indice en indice.
+          </p>
+          <div class="accueil-aleatoire">
+            <button type="button" class="bouton" data-difficulte="debutant">
+              Débutant
+              <small>6 × 6</small>
+            </button>
+            <button type="button" class="bouton" data-difficulte="intermediaire">
+              Intermédiaire
+              <small>7 × 7</small>
+            </button>
+          </div>
+        </section>
       </div>
     </div>
 

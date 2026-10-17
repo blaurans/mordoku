@@ -224,6 +224,52 @@ inutilisable. Effet mesuré sur 60 dossiers par taille :
 Zéro placement erroné sur 120 dossiers. Le test `tests/e2e-trace.mjs` vérifie
 que les positions annoncées par la trace sont bien celles de la solution.
 
+## 12. Affaires pré-calculées
+
+Au lancement, le jeu affiche un écran de choix : six dossiers préparés, ou
+une affaire générée à la volée.
+
+- `site/js/murdoku/cas-precalcules.js` — fichier **généré**, ne pas éditer.
+- `outils/construire-cas.mjs` — le constructeur. `--verifier` relit le
+  fichier et revalide chaque cas sans rien écrire.
+- `site/js/murdoku/cas.js` — `reconstruireCas()` recharge un cas.
+
+Progression, du plus simple au plus exigeant :
+
+| Palier | Cas | Grille | Indices | Déductions |
+|---|---|---|---|---|
+| 1 | `premier-pas` | 4×4 | 8 | 4 |
+| 2 | `croisements` | 5×5 | 10 | 5 |
+| 3 | `le-bureau` | 6×6 | 8 | 6 |
+| 4 | `la-villa` | 6×6 | 7 | 6 |
+| 5 | `le-theatre` | 6×6 | 7 | 6 |
+| 6 | `la-plage` | 7×7 | 10 | 7 |
+
+Les paliers 1 et 2 sont « mécaniques » : chaque personne est donnée par sa
+ligne et sa colonne, on apprend à lire la grille. Les suivants sont tirés
+du catalogue d'indices puis **élagués au minimum** : on retire un indice
+tant que le dossier reste unique et entièrement déductible. On obtient le
+plus petit jeu d'indices qui explique l'affaire.
+
+Deux propriétés sont garanties et retestées à chaque `node --test` :
+solution unique, et déduction complète. C'est ce qui permet d'annoncer
+« résolution expliquée étape par étape » dans l'accueil.
+
+Trois pièges payés :
+
+1. Les contraintes globales sont des **fonctions**, donc non
+   sérialisables. Elles sont décrites par un objet (`{type:'au-moins', …}`)
+   et réinterprétées au chargement par `reconstruireGlobal()`.
+2. La clé de scène est `interdites` (avec « e »). Une faute de frappe à la
+   sérialisation faisait disparaître les cases bloquées : le dossier
+   redevenait non unique, et rien ne le signalait. D'où la revalidation
+   systématique après relecture, dans le constructeur **et** dans les tests.
+3. `reconstruireCas()` lève sur un champ manquant plutôt que de charger un
+   cas incomplet en silence.
+
+Les cas pré-calculés n'entrent pas dans les records : un temps sur un
+dossier figé n'est pas comparable à un temps sur un dossier aléatoire.
+
 La section solution reste protégée par un mot de passe côté client
 (`EMPREINTE_MDP`, empreinte djb2 dans `game.js`, secret écrit `['md','p'].join('')`).
 Ce n'est **pas** une sécurité : le digest est dans le JavaScript servi à

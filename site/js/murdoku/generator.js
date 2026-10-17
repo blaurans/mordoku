@@ -162,7 +162,7 @@ function verifierClue(clue, scene, arrangement) {
  * réduit le plus le nombre de solutions restantes. `echeance` permet
  * d'abandonner une piste trop coûteuse plutôt que de figer le jeu.
  */
-function selectionnerIndices(scene, candidats, arrangement, random, echeance) {
+export function selectionnerIndices(scene, candidats, arrangement, random, echeance) {
   const N = scene.taille;
   const selection = [];
   let masquesActuels = Array(N).fill(null);

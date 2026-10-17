@@ -23,6 +23,38 @@ En ligne : <https://mordoku.laurans.org>
 
 Chaque affaire possède exactement une solution déductible, sans deviner.
 
+## Deux façons de jouer
+
+Au lancement, le jeu propose un choix.
+
+**Six dossiers préparés**, du plus simple au plus exigeant. Ils sont figés
+dans le dépôt, jamais tirés au sort, et tous ont été vérifiés un par un à
+la construction : solution unique, et résolution **entièrement** par
+déduction, étape par étape. La section « solution » les explique donc
+jusqu'au bout.
+
+Le premier est volontairement mécanique : 4 × 4, et pour chaque personne un
+indice de ligne plus un indice de colonne — le croisement des deux est la
+seule case possible. On apprend à lire la grille avant de lire la scène.
+Les suivants abandonnent peu à peu ce confort : 5 × 5, puis 6 × 6 où les
+indices parlent d'objets et de pièces, et enfin 7 × 7 avec le jeu d'indices
+le plus court qui résout encore l'affaire.
+
+**Une affaire au hasard**, aux difficultés habituelles (6 × 6 et 7 × 7).
+
+Les fichiers de cas sont produits par `outils/construire-cas.mjs`, jamais
+édités à la main :
+
+```sh
+node outils/construire-cas.mjs            # reconstruit le fichier des cas
+node outils/construire-cas.mjs --verifier # relit le fichier et revalide chaque cas
+```
+
+La construction valide chaque cas deux fois : une fois en mémoire, une
+fois après sérialisation et rechargement. C'est ce second passage qui a
+révélé une faute de frappe dans une clé de scène, qui faisait disparaître
+les cases interdites et rendait un dossier non unique.
+
 ## Développement local
 
 Les modules ES ne se chargent pas depuis `file://`. Un serveur statique
@@ -41,7 +73,8 @@ Logique pure et sans dépendance, testée avec le runner natif de Node :
 cd ~/mordoku && node --test
 ```
 
-39 tests (générateur, unicité, Solveur, scène, données).
+13 tests (générateur, unicité, solveur, scène, et revalidation complète des
+six dossiers préparés).
 
 L'interface est vérifiée par un harnais qui pilote un Chromium headless via
 le protocole DevTools, sans aucune dépendance npm (installé via mise) :
@@ -63,6 +96,7 @@ mordoku/
 │   ├── index.html
 │   ├── css/style.css
 │   └── js/{game.js, storage.js, murdoku/*}
+├── outils/           scripts de construction hors ligne (cas pré-calculés)
 ├── tests/            tests unitaires + tests d'interface
 ├── deploy/           extraits Caddy/compose appliqués sur le serveur
 ├── handoff.md        contexte de reprise / déploiement

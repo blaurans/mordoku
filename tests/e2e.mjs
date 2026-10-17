@@ -29,6 +29,9 @@ const erreurs = []; ws.addEventListener('message', (e) => { const m = JSON.parse
 await pause(2000);
 await ev('localStorage.clear()');
 await send('Page.navigate', { url: BASE });
+// Au premier lancement le jeu affiche l'accueil : on choisit une affaire.
+await pause(1200);
+await ev(`document.querySelector('#accueil [data-difficulte]').click()`);
 await pause(30000); // laisser l'affaire se générer (jusqu'à 8×8 en ~5 s)
 
 const snapshot = await ev(`({

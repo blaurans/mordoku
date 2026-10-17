@@ -23,8 +23,11 @@ await send('Runtime.enable'); await send('Page.enable');
 await send('Page.navigate', { url: BASE });
 await pause(1500);
 // Repart d'un profil vierge, sinon on retombe sur la partie du run précédent.
-await ev(`localStorage.clear()`);
+await ev('localStorage.clear()');
 await send('Page.navigate', { url: BASE });
+// Au premier lancement le jeu affiche l'accueil : on choisit une affaire.
+await pause(1200);
+await ev(`document.querySelector('#accueil [data-difficulte]').click()`);
 await pause(25000);
 const errs = []; ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errs.push(m.params.args.map((x) => x.value || x.description).join(' ')); if (m.method === 'Runtime.exceptionThrown') errs.push('EXC:' + (m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text)); });
 await pause(25000);

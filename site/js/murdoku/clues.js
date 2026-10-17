@@ -121,6 +121,46 @@ function celluleObjet(scene, idObjet) {
   return scene.objets.find((o) => o.id === idObjet)?.cellule ?? -1;
 }
 
+/** Les N cases d'une ligne. Utilisé par la fabrique et par les cas figés. */
+export function masqueLigne(scene, ligne) {
+  const t = scene.taille;
+  const m = new Uint8Array(t * t);
+  for (let c = 0; c < t; c++) m[ligne * t + c] = 1;
+  return m;
+}
+
+/** Les N cases d'une colonne. */
+export function masqueColonne(scene, colonne) {
+  const t = scene.taille;
+  const m = new Uint8Array(t * t);
+  for (let l = 0; l < t; l++) m[l * t + colonne] = 1;
+  return m;
+}
+
+/** Indice « X est dans la ligne N ». */
+export function indiceLigne(scene, personne, ligne) {
+  const suspects = scene.lettres.length;
+  return {
+    id: `ligne-${personne}-${ligne}`,
+    sujets: [personne],
+    titre: `« ${scene.noms[personne]} est dans la ligne ${ligne + 1}. »`,
+    masques: Array.from({ length: suspects }, (_, i) => (i === personne ? masqueLigne(scene, ligne) : null)),
+    global: null,
+  };
+}
+
+/** Indice « X est dans la colonne N ». */
+export function indiceColonne(scene, personne, colonne) {
+  const suspects = scene.lettres.length;
+  return {
+    id: `colonne-${personne}-${colonne}`,
+    sujets: [personne],
+    titre: `« ${scene.noms[personne]} est dans la colonne ${colonne + 1}. »`,
+    masques: Array.from({ length: suspects }, (_, i) => (i === personne ? masqueColonne(scene, colonne) : null)),
+    global: null,
+  };
+}
+
 
 /** Convertit un objet de scène en texte piéce. */
 function nomPiece(scene, pieceId) {
@@ -229,41 +269,13 @@ export const Fabriques = [
   },
   // --- indice 6 : ligne exacte (X est dans la ligne N) ---
   (scene, placement, random) => {
-    const suspects = scene.lettres.length;
-    const pessoa = Math.floor(random() * suspects);
-    const cellule = placement[pessoa];
-    const ligne = Math.floor(cellule / scene.taille);
-    const masque = new Uint8Array(scene.taille * scene.taille).fill(0);
-    for (let c = 0; c < scene.taille; c++) masque[ligne * scene.taille + c] = 1;
-    const masques = Array.from({ length: suspects }, (_, i) =>
-      i === pessoa ? masque : null,
-    );
-    return {
-      id: `ligne-${pessoa}-${ligne}`,
-      sujets: [pessoa],
-      titre: `« ${scene.noms[pessoa]} est dans la ligne ${ligne + 1}. »`,
-      masques,
-      global: null,
-    };
+    const pessoa = Math.floor(random() * scene.lettres.length);
+    return indiceLigne(scene, pessoa, Math.floor(placement[pessoa] / scene.taille));
   },
   // --- indice 7 : colonne exacte ---
   (scene, placement, random) => {
-    const suspects = scene.lettres.length;
-    const pessoa = Math.floor(random() * suspects);
-    const cellule = placement[pessoa];
-    const colonne = cellule % scene.taille;
-    const masque = new Uint8Array(scene.taille * scene.taille).fill(0);
-    for (let l = 0; l < scene.taille; l++) masque[l * scene.taille + colonne] = 1;
-    const masques = Array.from({ length: suspects }, (_, i) =>
-      i === pessoa ? masque : null,
-    );
-    return {
-      id: `colonne-${pessoa}-${colonne}`,
-      sujets: [pessoa],
-      titre: `« ${scene.noms[pessoa]} est dans la colonne ${colonne + 1}. »`,
-      masques,
-      global: null,
-    };
+    const pessoa = Math.floor(random() * scene.lettres.length);
+    return indiceColonne(scene, pessoa, placement[pessoa] % scene.taille);
   },
   // --- indice 8 : meme diagonale avec un objet ---
   (scene, placement, random) => {

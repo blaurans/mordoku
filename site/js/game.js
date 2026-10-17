@@ -4,6 +4,7 @@
  */
 
 import { genererAffaireAuHasard } from './murdoku/generator.js';
+import { CAS_PRECALCULES, reconstruireCas } from './murdoku/cas.js';
 import { enrichir } from './murdoku/clues.js';
 import { avecArticle } from './murdoku/scene.js';
 import { deduire, position, nomInterdit } from './murdoku/solution.js';
@@ -32,6 +33,9 @@ const els = {
   listeIndices: document.getElementById('liste-indices'),
   videIndices: document.getElementById('vide-indices'),
   records: document.getElementById('records'),
+  accueil: document.getElementById('accueil'),
+  listeCas: document.getElementById('liste-cas'),
+  boutonAccueil: document.getElementById('bouton-accueil'),
   voile: document.getElementById('voile'),
   chargement: document.getElementById('chargement'),
   chrono: document.getElementById('chrono'),
@@ -76,6 +80,7 @@ const PORTRAITS = ['👩🏻', '👨🏾', '👩🏼', '👨🏻', '👩🏽', '
 const state = {
   affaire: null,
   difficulty: 'debutant',
+  casId: null,
   placements: [],
   xMarks: new Set(),
   candidats: [],
@@ -113,7 +118,15 @@ function annonce(msg) {
   els.annce.textContent = msg;
 }
 
-function diffInfo() { return DIFFICULTIES.find((d) => d.id === state.difficulty) ?? DIFFICULTIES[0]; }
+/** Les cas pré-calculés ne sont pas des difficultés : ils ont leur propre
+ *  pénalité d'indice et n'entrent jamais dans les records, qui ne
+ *  compareraient pas des grilles différentes. */
+const INFO_CAS = { id: 'cas', label: 'Cas pré-calculé', taille: 6, penaliteIndice: 60000 };
+
+function diffInfo() {
+  if (state.difficulty === 'cas') return INFO_CAS;
+  return DIFFICULTIES.find((d) => d.id === state.difficulty) ?? DIFFICULTIES[0];
+}
 
 function lettres() { return state.affaire.scene.lettres; }
 function N() { return state.affaire.scene.taille; }
@@ -125,6 +138,7 @@ function sauvegarder() {
   sauverPartie({
     version: 1,
     difficulte: state.difficulty,
+    casId: state.casId,
     seed: state.affaire.seed,
     taille: state.affaire.taille,
     scene: state.affaire.scene,
@@ -165,6 +179,11 @@ let pieceTable = [];
 function reconstruireScene() {
   const scene = state.affaire.scene;
   const taille = scene.taille;
+  // `--cols` est posé sur l'hôte : la feuille en a besoin pour dimensionner
+  // la scène, et une propriété personnalisée ne remonte pas vers le parent.
+  const hote = els.scene.parentElement;
+  hote.style.setProperty('--cols', String(taille));
+  hote.style.setProperty('--lignes', String(taille));
   els.scene.style.setProperty('--cols', String(taille));
   els.scene.style.setProperty('--lignes', String(taille));
   els.scene.replaceChildren();
@@ -440,12 +459,17 @@ function construireListeSuspects() {
     const carte = document.createElement('p');
     carte.className = 'carte-indice';
     carte.style.setProperty('--teinte', teinte);
+
+    // La victime garde ses indices : sans eux, on ne peut pas la placer.
+    // On se contente de dire qu'elle était seule avec le meurtrier.
+    const morceaux = [];
     if (p === affaire.victime) {
       carte.classList.add('victime');
-      carte.innerHTML = '<strong>La victime.</strong> Elle était <strong>seule</strong> avec le meurtrier.';
-    } else if (mesIndices.length) {
-      carte.innerHTML = mesIndices.map((c) => enrichir(c.titre, scene)).join('<br>');
-    } else {
+      morceaux.push('La victime — elle était seule avec le meurtrier.');
+    }
+    if (mesIndices.length) morceaux.push(...mesIndices.map((c) => enrichir(c.titre, scene)));
+    if (morceaux.length) carte.innerHTML = morceaux.join('<br>');
+    else {
       carte.classList.add('vide');
       carte.textContent = 'Aucun indice direct — déduisez de la scène.';
     }
@@ -489,6 +513,7 @@ function restaurer(partie) {
     };
     state.affaire = affaire;
     state.difficulty = partie.difficulte;
+    state.casId = partie.casId ?? null;
     state.placements = (partie.placements ?? []).slice();
     state.xMarks = new Set(partie.xMarks ?? []);
     state.candidats = Array.from({ length: (partie.scene?.lettres?.length ?? 0) }, (_, i) =>
@@ -505,9 +530,13 @@ function restaurer(partie) {
     state.futur = [];
     state.lettresAffaire = affaire.scene.lettres;
 
-    els.titreAffaire.textContent = affaire.scene.titre + (state.meurtrierRevele ? ' (résolu)' : '');
-    const di = DIFFICULTIES.find((d) => d.id === state.difficulty) ?? DIFFICULTIES[0];
-    els.selectDifficulte.value = state.difficulty;
+    const estCas = Boolean(state.casId);
+    els.selectDifficulte.hidden = estCas;
+    els.titreAffaire.textContent =
+      (estCas
+        ? `${affaire.scene.titre} · palier ${brutNiveau(state.casId)}`
+        : affaire.scene.titre) + (state.meurtrierRevele ? ' (résolu)' : '');
+    if (!estCas) els.selectDifficulte.value = state.difficulty;
     chargerListeIndices();
     construireListeSuspects();
     reconstruireScene();
@@ -727,7 +756,10 @@ function soumettre() {
     state.runningSince = null;
     state.meurtrierRevele = true;
     // Un temps obtenu avec des indices n'est pas un record honnête.
-    const record = state.indices === 0 && enregistrerRecord(state.difficulty, state.elapsedMs);
+    // Un temps sur un dossier figé ne se compare pas à un temps sur un
+    // dossier aléatoire : on ne l'enregistre pas.
+    const record =
+      state.indices === 0 && !state.casId && enregistrerRecord(state.difficulty, state.elapsedMs);
     if (record) chargerRecordsUI();
 
     const indices = state.indices > 0 ? ` · ${state.indices} indice${state.indices > 1 ? 's' : ''}` : '';
@@ -831,15 +863,138 @@ function appliquerTheme(theme) {
 }
 
 
+/**
+ * Installe une affaire dans l'état du jeu et rafraîchit l'écran.
+ * Commun aux deux entrées : affaires pré-calculées et génération.
+ */
+function installerAffaire(affaire, difficulte, casId = null) {
+  state.affaire = affaire;
+  state.difficulty = difficulte;
+  state.casId = casId;
+  state.placements = new Array(affaire.scene.lettres.length).fill(-1);
+  state.candidats = Array.from({ length: affaire.scene.lettres.length }, () => []);
+  state.xMarks = new Set();
+  state.selectedPerson = 0;
+  state.tool = 'personne';
+  state.elapsedMs = 0;
+  state.runningSince = now();
+  state.enPause = false;
+  state.terminee = false;
+  state.meurtrierRevele = false;
+  state.historique = [];
+  state.futur = [];
+  state.indices = 0;
+  state.lettresAffaire = affaire.scene.lettres;
+
+  els.titreAffaire.textContent = affaire.scene.titre;
+  // Les cas pré-calculés ont leur propre progression : le sélecteur de
+  // difficulté n'a pas de sens pour eux et afficherait une valeur fausse.
+  const estCas = Boolean(casId);
+  els.selectDifficulte.hidden = estCas;
+  els.titreAffaire.textContent = estCas
+    ? `${affaire.scene.titre} · palier ${brutNiveau(casId)}`
+    : affaire.scene.titre;
+  if (!estCas) els.selectDifficulte.value = difficulte;
+
+  if (state.chronoHandle !== null) clearInterval(state.chronoHandle);
+  state.chronoHandle = window.setInterval(() => {
+    if (!state.enPause && !state.terminee && state.runningSince !== null) {
+      els.chrono.textContent = formatDuration(tempsEcoule());
+    }
+  }, 500);
+
+  construireListeSuspects();
+  chargerListeIndices();
+  reconstruireScene();
+  chargerRecordsUI();
+  majOutils();
+  els.chargement.hidden = true;
+  els.fin.hidden = true;
+  mettreAjourUISelection();
+  mettreAjourValidation();
+  sauvegarder();
+}
+
+/** Lance une affaire pré-calculée de la liste d'accueil. */
+function demarrerCasPrecalcule(brut) {
+  els.chargement.hidden = false;
+  try {
+    const affaire = reconstruireCas(brut);
+    // Les cas figés n'appartiennent à aucune difficulté de jeu : ils ont
+    // leur propre niveau, et ne doivent pas entrer dans les records.
+    installerAffaire(affaire, 'cas', brut.id);
+    fermerAccueil();
+  } catch (err) {
+    console.error(err);
+    els.chargement.hidden = true;
+    annonce("Ce dossier n'a pas pu être chargé.");
+  }
+}
+
+/* ---------- Accueil : affaires pré-calculées ou génération ---------- */
+
+function construireListeCas() {
+  els.listeCas.replaceChildren();
+  for (const brut of CAS_PRECALCULES) {
+    const li = document.createElement('li');
+    const bouton = document.createElement('button');
+    bouton.type = 'button';
+    bouton.className = 'cas';
+    bouton.dataset.cas = brut.id;
+
+    const entete = document.createElement('span');
+    entete.className = 'cas-entete';
+
+    const niveau = document.createElement('span');
+    niveau.className = 'cas-niveau';
+    niveau.textContent = brut.niveau === 1 ? 'Pour commencer' : `Palier ${brut.niveau}`;
+
+    const titre = document.createElement('strong');
+    titre.className = 'cas-titre';
+    titre.textContent = `${brut.scene.titre} · ${brut.taille}×${brut.taille}`;
+
+    entete.append(niveau, titre);
+
+    const resume = document.createElement('span');
+    resume.className = 'cas-resume';
+    resume.textContent = brut.resume ?? '';
+
+    const detail = document.createElement('span');
+    detail.className = 'cas-detail';
+    detail.textContent = `${brut.indices.length} indices · résolution expliquée étape par étape`;
+
+    bouton.append(entete, resume, detail);
+    bouton.addEventListener('click', () => demarrerCasPrecalcule(brut));
+
+    li.append(bouton);
+    els.listeCas.append(li);
+  }
+}
+
+function ouvrirAccueil() {
+  construireListeCas();
+  els.accueil.hidden = false;
+  const premier = els.listeCas.querySelector('button');
+  if (premier) premier.focus();
+}
+
+function fermerAccueil() {
+  els.accueil.hidden = true;
+}
+
+/** Palier d'un cas pré-calculé, pour l'afficher dans le titre. */
+function brutNiveau(casId) {
+  return CAS_PRECALCULES.find((c) => c.id === casId)?.niveau ?? '?';
+}
+
 function nouvelleAffaire(difficulte = state.difficulty, tente = 0) {
   if (tente >= 3) {
     annonce('Impossible de générer une affaire pour cette taille.');
     els.chargement.hidden = true;
-        cacherInfo();
+    cacherInfo();
     return;
   }
   els.chargement.hidden = false;
-  state.difficulty = difficulte;
 
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {
@@ -851,41 +1006,8 @@ function nouvelleAffaire(difficulte = state.difficulty, tente = 0) {
           nouvelleAffaire(difficulte, tente + 1);
           return;
         }
-        state.affaire = affaire;
-        state.placements = new Array(affaire.scene.lettres.length).fill(-1);
-        state.candidats = Array.from({ length: affaire.scene.lettres.length }, () => []);
-        state.xMarks = new Set();
-        state.selectedPerson = 0;
-        state.tool = 'personne';
-        state.elapsedMs = 0;
-        state.runningSince = now();
-        state.enPause = false;
-        state.terminee = false;
-        state.meurtrierRevele = false;
-        state.historique = [];
-        state.futur = [];
-        state.indices = 0;
-        els.titreAffaire.textContent = affaire.scene.titre;
-        els.selectDifficulte.value = difficulte;
-        state.lettresAffaire = affaire.scene.lettres;
-
-        if (state.chronoHandle !== null) clearInterval(state.chronoHandle);
-        state.chronoHandle = window.setInterval(() => {
-          if (!state.enPause && !state.terminee && state.runningSince !== null) {
-            els.chrono.textContent = formatDuration(tempsEcoule());
-          }
-        }, 500);
-
-        construireListeSuspects();
-        chargerListeIndices();
-        reconstruireScene();
-        chargerRecordsUI();
-        majOutils();
-        els.chargement.hidden = true;
-        els.fin.hidden = true;
-        mettreAjourUISelection();
-        mettreAjourValidation();
-        sauvegarder();
+        installerAffaire(affaire, difficulte, null);
+        fermerAccueil();
       } catch (err) {
         console.error(err);
         els.chargement.hidden = true;
@@ -907,7 +1029,7 @@ function brancher() {
   els.boutonRetablir.addEventListener('click', redo);
   els.boutonIndice.addEventListener('click', donnerIndice);
   els.boutonSoumettre.addEventListener('click', soumettre);
-  els.boutonNouvelle.addEventListener('click', () => { els.fin.hidden = true; nouvelleAffaire(state.difficulty); });
+  els.boutonNouvelle.addEventListener('click', () => { els.fin.hidden = true; ouvrirAccueil(); });
   els.boutonRevoir.addEventListener('click', () => { els.fin.hidden = true; });
   els.boutonFermerFin.addEventListener('click', () => { els.fin.hidden = true; });
   els.boutonAide.addEventListener('click', () => { els.aide.hidden = false; });
@@ -932,6 +1054,16 @@ function brancher() {
 
   els.selectDifficulte.addEventListener('change', (e) => nouvelleAffaire(e.target.value));
 
+  els.boutonAccueil.addEventListener('click', ouvrirAccueil);
+  els.accueil.addEventListener('click', (e) => {
+    if (e.target !== els.accueil) return;
+    if (!state.affaire) return; // premier lancement : il faut choisir
+    fermerAccueil();
+  });
+  for (const bouton of els.accueil.querySelectorAll('[data-difficulte]')) {
+    bouton.addEventListener('click', () => nouvelleAffaire(bouton.dataset.difficulte));
+  }
+
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey) {
       if (e.key.toLowerCase() === 'z') {
@@ -942,6 +1074,7 @@ function brancher() {
     }
     switch (e.key) {
       case 'p': case 'P': basculerPause(); break;
+      case 'a': case 'A': ouvrirAccueil(); break;
       case 't': case 'T': appliquerTheme(state.theme === 'clair' ? 'sombre' : 'clair'); break;
       case 'x': case 'X': state.tool = 'x'; majOutils(); break;
       case 'c': case 'C': state.tool = 'candidat'; majOutils(); break;
@@ -959,9 +1092,10 @@ function brancher() {
   appliquerTheme(chargerTheme());
   els.selectDifficulte.value = state.difficulty;
 
+  construireListeCas();
   const partie = chargerPartie();
   if (partie) restaurer(partie);
-  else nouvelleAffaire(state.difficulty);
+  else ouvrirAccueil(); // premier lancement : on laisse le choix
 }
 
 brancher();

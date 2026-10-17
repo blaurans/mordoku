@@ -442,7 +442,12 @@ body {
 
 .scene-hote {
   position: relative;
-  width: min(100%, 620px);
+  /* La case ne doit pas devenir démesurée sur une petite grille : on plafonne
+     la largeur d'une case à ~88 px, ce qui borne la scène à 352 px en 4×4.
+     `container-type` permet ensuite de dimensionner les noms de pièces
+     relatively à la scène : ils se réduisent quand la grille rétrécit. */
+  width: min(100%, calc(var(--cols, 6) * 88px), 620px);
+  container-type: inline-size;
 }
 
 .scene {
@@ -591,7 +596,7 @@ html[data-theme='sombre'] .cellule {
 .nom-piece {
   position: absolute;
   transform: translate(-50%, -50%);
-  font-size: clamp(0.6rem, 1.9vw, 0.92rem);
+  font-size: clamp(0.5rem, 4.4cqw, 0.92rem);
   font-weight: 900;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -713,7 +718,7 @@ html[data-theme='sombre'] .cellule {
    ========================================================================== */
 
 .nom-piece.serré {
-  font-size: clamp(0.52rem, 1.4vw, 0.72rem);
+  font-size: clamp(0.42rem, 3.1cqw, 0.72rem);
   letter-spacing: 0.03em;
 }
 
@@ -1093,4 +1098,104 @@ kbd {
   bottom: 100%;
   border-top-color: transparent;
   border-bottom-color: var(--trait-couleur);
+}
+
+/* ==========================================================================
+   Accueil : choix d'une affaire
+   ========================================================================== */
+
+.modale-accueil {
+  width: min(640px, 100%);
+}
+.accueil-note {
+  margin: 0 0 12px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--encre-doux);
+}
+
+.liste-cas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  counter-reset: cas;
+}
+
+.cas {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 11px 13px;
+  font: inherit;
+  text-align: left;
+  color: var(--encre);
+  background: var(--papier);
+  border: var(--trait) solid var(--trait-couleur);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.12s, transform 0.12s, background 0.12s;
+}
+.cas:hover,
+.cas:focus-visible {
+  background: var(--carte);
+  border-color: var(--accent);
+  transform: translateX(2px);
+  outline: none;
+}
+
+.cas-entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.cas-niveau {
+  padding: 1px 7px;
+  font-size: 0.64rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  background: var(--accent-doux);
+  border-radius: 5px;
+}
+.cas-titre {
+  font-size: 0.95rem;
+  font-weight: 900;
+}
+.cas-resume {
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--encre-doux);
+}
+.cas-detail {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--encre-doux);
+  opacity: 0.8;
+}
+
+.accueil-aleatoire {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.accueil-aleatoire .bouton {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 150px;
+  text-align: center;
+}
+.accueil-aleatoire small {
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.bloc-accueil + .bloc-accueil {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: var(--trait) solid var(--trait-couleur);
 }
