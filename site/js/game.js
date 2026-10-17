@@ -484,7 +484,7 @@ function restaurer(partie) {
     if (state.meurtrierRevele) {
       const meurtrier = state.lettresAffaire[state.affaire.meurtrier];
       const victime = state.lettresAffaire[state.affaire.victime];
-      els.reveal.innerHTML = `<strong>Meurtrier : ${meurtrier}</strong><br/>La victime <strong>${victime}</strong> est restée seule avec lui.`;
+      els.reveal.innerHTML = `<strong>Meurtrier : ${meurtrier}</strong><br/><strong>${meurtrier}</strong> et <strong>${victime}</strong> ont fini seuls dans la même zone.`;
       els.finTitre.textContent = `Résolu — ${formatDuration(state.elapsedMs)}`;
       els.finSousTitre.textContent = '';
       els.fin.hidden = false;
@@ -691,7 +691,7 @@ function soumettre() {
       : 'Toutes les déductions étaient justes.';
     const meurtrier = lettres()[state.affaire.meurtrier];
     const victime = lettres()[state.affaire.victime];
-    els.reveal.innerHTML = `<strong>Meurtrier : ${meurtrier}</strong><br/>La victime <strong>${victime}</strong> est restée seule avec lui.`;
+    els.reveal.innerHTML = `<strong>Meurtrier : ${meurtrier}</strong><br/><strong>${meurtrier}</strong> et <strong>${victime}</strong> ont fini seuls dans la même zone.`;
     els.fin.hidden = false;
     annonce(`Affaire résolue en ${formatDuration(state.elapsedMs)}`);
     sauvegarder();
@@ -1008,5 +1008,5 @@ function afficherSolution() {
 
   els.revealSolution.innerHTML =
     `<strong>Meurtrier : ${scene.noms[affaire.meurtrier]}</strong><br/>` +
-    `${scene.noms[affaire.victime]} est restée seule avec lui dans la même zone.`;
+    `${scene.noms[affaire.meurtrier]} et ${scene.noms[affaire.victime]} ont fini seuls dans la même zone.`;
 }

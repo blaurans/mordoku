@@ -168,8 +168,6 @@ export const THEMES = [
   },
 ];
 
-const LETTRES = 'ABCDEFGHIJ';
-
 /**
  * Prénoms des suspects. Tirés sans répétition dans chaque affaire : ça
  * donne beaucoup plus de présence qu'une lettre, et l'indice devient
@@ -272,7 +270,25 @@ export function genererScene(taille, theme, random) {
   });
 
   // Un objet par pièce au minimum, plus quelques-uns supplémentaires.
-  const noms = shuffled(NOMS, random).slice(0, taille);
+  // Les lettres doivent être les initiales des prénoms, sinon la lettre
+  // affichée sur la case et le nom de la carte ne correspondent pas.
+  // On ignore les doublons d'initiale pour que deux suspects ne s'appelent
+  // jamais tous les deux « C », et on retire les accents (« É » -> « E »).
+  const noms = [];
+  const lettres = [];
+  const initialesPrises = new Set();
+  for (const nom of shuffled(NOMS, random)) {
+    if (noms.length >= taille) break;
+    const initiale = nom
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .charAt(0)
+      .toUpperCase();
+    if (initialesPrises.has(initiale)) continue;
+    initialesPrises.add(initiale);
+    noms.push(nom);
+    lettres.push(initiale);
+  }
   const paletteObjets = [...theme.objets];
   const objets = [];
   for (const piece of pieces) {
@@ -307,8 +323,8 @@ export function genererScene(taille, theme, random) {
     pieces,
     objets,
     interdites,
-    /** Pour chaque personne, une lettre d'identité. */
-    lettres: LETTRES.slice(0, taille),
+    /** La lettre de chaque personne : l'initiale de son prénom. */
+    lettres,
     /** Et un prénom, pour la présentation. */
     noms: [...noms],
   };
