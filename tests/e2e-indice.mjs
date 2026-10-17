@@ -93,7 +93,7 @@ await ev(`
   (() => {
     const s = JSON.parse(localStorage.getItem('mordoku.partie.v1'));
     for (let p = 0; p < s.arrangement.length; p++) {
-      document.querySelector('.suspect-carte[data-personne="' + p + '"]').click();
+      document.querySelector('.suspect[data-personne="' + p + '"]').click();
       document.querySelector('.cellule[data-index="' + s.arrangement[p] + '"]').click();
     }
     return true;

@@ -52,7 +52,7 @@ function estMeurtrierValide(affaire) {
   return pieceVictime.includes(affaire.meurtrier);
 }
 
-for (const taille of [6, 7, 8]) {
+for (const taille of [6, 7]) {
   test(`génération ${taille}×${taille} : placement valide`, () => {
     const affaire = genererAffaireAuHasard(taille, 2026);
     assert.ok(affaire, 'l\'affaire doit être générée');

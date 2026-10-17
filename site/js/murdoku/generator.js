@@ -18,13 +18,14 @@ function combinerMasques(a, b) {
   return r;
 }
 
-function genererPlacement(scene, random) {
+function genererPlacement(scene, random, echeance = Infinity) {
   const N = scene.taille;
   const interdites = new Set((scene.interdites ?? []).map((x) => x.cellule));
   const placement = new Int16Array(N).fill(-1);
   const personnageUtilise = new Uint8Array(N);
   const ligneUtilisee = new Uint8Array(N);
   const colonneUtilisee = new Uint8Array(N);
+  let noeuds = 0;
 
   const ordre = Array.from({ length: N }, (_, i) => i).sort(() => random() - 0.5);
 
@@ -32,6 +33,9 @@ function genererPlacement(scene, random) {
 
   function chercher() {
     if (trouve) return true;
+    // Même garde-fou que le solveur : un placement peut explorer un arbre
+    // combinatoire déraisonnable sur les grandes grilles.
+    if ((++noeuds & 255) === 0 && Date.now() > echeance) return false;
     // MRV
     let p = -1;
     let minOptions = Infinity;
@@ -117,7 +121,12 @@ function verifierClue(clue, scene, arrangement) {
   return true;
 }
 
-function selectionnerIndices(scene, candidats, arrangement, random) {
+/**
+ * Sélection gloutonne des indices : à chaque tour on retient celui qui
+ * réduit le plus le nombre de solutions restantes. `echeance` permet
+ * d'abandonner une piste trop coûteuse plutôt que de figer le jeu.
+ */
+function selectionnerIndices(scene, candidats, arrangement, random, echeance) {
   const N = scene.taille;
   const selection = [];
   let masquesActuels = Array(N).fill(null);
@@ -125,13 +134,18 @@ function selectionnerIndices(scene, candidats, arrangement, random) {
 
   const pool = candidats.slice();
   let garde = 0;
-  while (selection.length < 14 && garde < 500) {
+  while (selection.length < 22 && garde < 900) {
     garde++;
+    // Budget temps : sur certaines grilles, une sélection peut partir
+    // dans des millions de nœuds. Plutôt que de figer l'onglet, on
+    // abandonne et l'appelant retentera avec une autre graine.
+    if (Date.now() > echeance) break;
     const solsActuels = compterSolutions(
       scene,
       masquesActuels,
       globalesActuelles,
       200,
+      echeance,
     );
     if (solsActuels <= 1) break;
     if (solsActuels === 0) break;
@@ -145,12 +159,13 @@ function selectionnerIndices(scene, candidats, arrangement, random) {
     const indicesATest = Array.from(pool.keys()).sort(() => random() - 0.5).slice(0, 6);
 
     for (const i of indicesATest) {
+      if (Date.now() > echeance) return selection;
       const c = pool[i];
       const trialMasks = masquesActuels.map((m, p) =>
         combinerMasques(m, c.masques ? c.masques[p] : null),
       );
       const trialGlobales = [...globalesActuelles, ...(c.global ? [c.global] : [])];
-      const sols = compterSolutions(scene, trialMasks, trialGlobales, 200);
+      const sols = compterSolutions(scene, trialMasks, trialGlobales, 200, echeance);
       const spec = specificite(c, scene);
       if (sols > 0 && (sols < meilleureReduction || (sols === meilleureReduction && spec < meilleureSpec))) {
         meilleureReduction = sols;
@@ -171,17 +186,19 @@ function selectionnerIndices(scene, candidats, arrangement, random) {
   return selection;
 }
 
-export function genererAffaireAuHasard(taille, seedBase = 1) {
+export function genererAffaireAuHasard(taille, seedBase = 1, budgetMs = 6000) {
+  const debut = Date.now();
   let seed = seedBase;
   for (let n = 0; n < 6; n++) {
-    const affaire = genererAffaire(taille, seed, null);
+    const affaire = genererAffaire(taille, seed, null, debut + budgetMs);
     if (affaire) return affaire;
     seed += 1;
+    if (Date.now() - debut > budgetMs) return null;
   }
   return null;
 }
 
-export function genererAffaire(taille, seed, theme) {
+export function genererAffaire(taille, seed, theme, echeance = Date.now() + 4000) {
   const random = createRandom(seed);
   let fond = theme;
   if (!fond) {
@@ -189,21 +206,23 @@ export function genererAffaire(taille, seed, theme) {
   }
 
   for (let essaiScene = 0; essaiScene < 50; essaiScene++) {
+    if (Date.now() > echeance) return null;
     const scene = genererScene(taille, fond, random);
     for (let essaiPlace = 0; essaiPlace < 80; essaiPlace++) {
-      const placement = genererPlacement(scene, random);
+      if (Date.now() > echeance) return null;
+      const placement = genererPlacement(scene, random, echeance);
       if (!placement) continue;
 
       const candidats = candidatsFabriques(scene, placement.arrangement, random);
       if (!candidats.length) continue;
 
-      const selection = selectionnerIndices(scene, candidats, placement.arrangement, random);
+      const selection = selectionnerIndices(scene, candidats, placement.arrangement, random, echeance);
 
       // Vérifier unicité et solution de référence.
       const masques = construireMasques(scene, selection);
       const globales = selection.map((c) => c.global).filter(Boolean);
-      if (compterSolutions(scene, masques, globales, 2) !== 1) continue;
-      const solution = resoudrePlacement(scene, masques, globales);
+      if (compterSolutions(scene, masques, globales, 2, echeance) !== 1) continue;
+      const solution = resoudrePlacement(scene, masques, globales, echeance);
       if (!solution) continue;
       let ok = true;
       for (let p = 0; p < solution.length; p++) {

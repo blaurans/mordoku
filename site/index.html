@@ -1,97 +1,163 @@
 <!DOCTYPE html>
-<html lang="fr" data-theme="sombre">
+<html lang="fr" data-theme="clair">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Mordoku</title>
-    <meta name="description" content="Murdoku en ligne, sans dépendance, tout se passe dans le navigateur." />
-    <meta name="color-scheme" content="dark light" />
+    <meta
+      name="description"
+      content="Mordoku : déduction spatiale sur une scène de crime. Un jeu de logique sans compte ni application."
+    />
+    <meta name="color-scheme" content="light dark" />
     <link rel="stylesheet" href="css/style.css" />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23151a23'/><text y='72' x='50' text-anchor='middle' font-size='62' font-family='monospace' fill='%23ff6b6b'>?</text></svg>" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23fdf8f2'/><text y='72' x='50' text-anchor='middle' font-size='60' font-family='sans-serif' fill='%23c0392b'>?</text></svg>"
+    />
   </head>
   <body>
     <a class="saut-contenu" href="#scene">Aller à la scène</a>
 
     <header class="entete">
-      <h1 class="titre">Mordoku</h1>
-      <div class="entete-méta">
-        <select id="select-difficulte" aria-label="Difficulté">
-          <option value="debutant">Débutant (6×6)</option>
-          <option value="facile">Facile (7×7)</option>
-          <option value="intermediaire">Intermédiaire (8×8)</option>
-        </select>
-        <span class="chrono" id="chrono" aria-live="off" title="Temps écoulé">00:00</span>
-        <button type="button" id="bouton-pause" class="bouton-icon" aria-pressed="false">
-          <span aria-hidden="true">⏸</span><span class="sr-only">Pause</span>
+      <div class="marque">
+        <h1 class="logo">MUR<span class="logo-suspect">◕</span>DOKU</h1>
+        <span class="signature">par <em>Mordoku.laurans.org</em></span>
+      </div>
+      <div class="entete-centre">
+        <h2 class="titre-affaire" id="titre-affaire">Nouvelle affaire</h2>
+        <div class="meta-affaire">
+          <span class="chrono" id="chrono" title="Temps écoulé">00:00</span>
+          <span class="pastille" id="pastille-indices" title="Indices utilisés">
+            Indices <b id="compteur-indices">0</b>
+          </span>
+        </div>
+      </div>
+      <div class="entete-droite">
+        <label class="selecteur">
+          <span class="sr-only">Difficulté</span>
+          <select id="select-difficulte">
+            <option value="debutant">Débutant (6×6)</option>
+            <option value="intermediaire">Intermédiaire (7×7)</option>
+          </select>
+        </label>
+        <button type="button" id="bouton-pause" class="carre" aria-pressed="false" title="Pause (P)">
+          <span aria-hidden="true">❚❚</span><span class="sr-only">Pause</span>
         </button>
-        <button type="button" id="bouton-theme" class="bouton-icon">
-          <span aria-hidden="true" id="theme-icone">☾</span>
-          <span class="sr-only">Changer de thème</span>
+        <button type="button" id="bouton-theme" class="carre" title="Thème (T)">
+          <span aria-hidden="true" id="theme-icone">☾</span><span class="sr-only">Changer de thème</span>
         </button>
       </div>
     </header>
 
-    <main class="plateau" id="surface-principale">
-      <section class="zone-scene" id="zone-scene">
-        <div class="titre-scene">
-          <span class="titre-affaire" id="titre-affaire">Nouvelle affaire</span>
-          <span class="numero" id="numero-case">CAS n°—</span>
+    <div class="corps">
+      <!-- ============ Colonne des suspects ============ -->
+      <section class="colonne-suspects" aria-label="Suspects">
+        <h2 class="titre-colonne">Suspects</h2>
+        <p class="aide-rapide">Cliquez pour sélectionner, puis cliquez sur la grille</p>
+        <ul class="liste-suspects" id="liste-suspects"></ul>
+        <ul class="liste-indices" id="liste-indices"></ul>
+        <p class="vide" id="vide-indices" hidden>Aucun indice général.</p>
+      </section>
+
+      <!-- ============ Plateau ============ -->
+      <main class="plateau">
+        <div class="scene-hote">
+          <div
+            id="scene"
+            class="scene"
+            role="grid"
+            aria-label="Scène de crime"
+          ></div>
+          <div class="calque-noms" id="calque-noms" aria-hidden="true"></div>
         </div>
-        <div id="scene" class="scene" role="grid" aria-label="Scène de crime" tabindex="0"></div>
+
         <div id="voile" class="voile" hidden>
           <div class="voile-boite">
             <p class="voile-titre">En pause</p>
             <button type="button" id="bouton-reprendre" class="bouton bouton-primaire">Reprendre</button>
           </div>
         </div>
-        <div id="chargement" class="chargement" aria-live="polite" hidden>
-          <span class="spinner"></span>
-          <span>Génération de la scène…</span>
+        <div id="chargement" class="chargement" role="status" hidden>
+          <span class="spinner" aria-hidden="true"></span>
+          <p>Génération de la scène…</p>
         </div>
-      </section>
+      </main>
 
-      <aside class="colonne-laterale">
-        <section class="carte">
-          <h2>Suspects</h2>
-          <ul id="liste-suspects" class="liste-suspects"></ul>
-        </section>
-        <section class="carte" id="section-indices">
-          <h2>Indices généraux</h2>
-          <ul id="liste-indices" class="indices-generaux"></ul>
-          <p id="vide-indices" class="vide">Aucun indice général.</p>
-        </section>
-        <section class="carte">
-          <h2>Actions</h2>
-          <div class="actions-grille">
-            <button type="button" id="bouton-outil-selection" data-outil="personne" class="outil actif">Personne</button>
-            <button type="button" id="bouton-outil-x" data-outil="x" class="outil">X</button>
-            <button type="button" id="bouton-outil-cand" data-outil="candidat" class="outil">Possible</button>
-            <button type="button" id="bouton-effacer" data-outil="effacer" class="outil">Effacer</button>
-          </div>
-          <div class="actions-finales">
-            <p class="sous-compteurs" id="compteurs">
-              <span>Indices <b id="compteur-indices">0</b></span>
-            </p>
-            <button type="button" id="bouton-annuler" class="bouton" disabled>Annuler</button>
-            <button type="button" id="bouton-retablir" class="bouton" disabled>Rétablir</button>
-            <button type="button" id="bouton-indice" class="bouton">Indice</button>
-            <button type="button" id="bouton-verifier" class="bouton">Vérifier</button>
-            <button type="button" id="bouton-soumettre" class="bouton bouton-primaire" disabled>Soumettre</button>
-          </div>
-        </section>
-        <section class="carte">
-          <h2>Records</h2>
-          <dl id="records" class="records"></dl>
-        </section>
+      <!-- ============ Bandeau d'outils ============ -->
+      <aside class="colonne-outils" aria-label="Outils">
+        <h2 class="sr-only">Outils</h2>
+
+        <button type="button" id="bouton-outil-x" class="outil-geant" title="Marquer une case impossible (X)">
+          <span aria-hidden="true">✕</span><span class="sr-only">Marquer X</span>
+        </button>
+        <button type="button" id="bouton-effacer" class="outil-geant" title="Tout effacer">
+          <span aria-hidden="true">🧽</span><span class="sr-only">Effacer tout</span>
+        </button>
+        <button type="button" id="bouton-annuler" class="outil-moyen" disabled title="Annuler (Ctrl+Z)">
+          Annuler
+        </button>
+
+        <div class="espaceur"></div>
+
+        <button type="button" id="bouton-indice" class="outil-grand" title="Un indice, moyennant une pénalité">
+          <span aria-hidden="true">💡</span> Indice
+        </button>
+        <button type="button" id="bouton-soumettre" class="outil-grand outil-valider" disabled>
+          Valider
+          <small>(placez tous les personnages)</small>
+        </button>
+        <button type="button" id="bouton-retablir" class="outil-moyen" disabled title="Rétablir (Ctrl+Maj+Z)">
+          Rétablir
+        </button>
+
+        <div class="espaceur"></div>
+
+        <button type="button" id="bouton-aide" class="outil-moyen">Comment jouer</button>
+        <dl class="records" id="records"></dl>
       </aside>
-    </main>
+    </div>
 
-    <div id="fin" class="fin" role="status" hidden>
-      <button type="button" class="bouton-fermer" id="bouton-fermer-fin" aria-label="Fermer">×</button>
-      <p class="fin-titre" id="fin-titre">…</p>
-      <p class="fin-sous-titre" id="fin-sous-titre"></p>
-      <div class="reveal" id="reveal">…</div>
-      <button type="button" class="bouton bouton-primaire" id="bouton-nouvelle">Nouvelle affaire</button>
+    <!-- ============ Aide ============ -->
+    <div id="aide" class="modale" role="dialog" aria-modal="true" aria-labelledby="titre-aide" hidden>
+      <div class="modale-boite">
+        <h2 id="titre-aide">Comment jouer</h2>
+        <p>
+          Un meurtre a eu lieu. <strong>Placez chaque personne</strong> sur la scène :
+          une seule personne par ligne, une seule par colonne.
+        </p>
+        <p>
+          Les cartes des suspects sont des <strong>contraintes</strong>, pas des hints.
+          Les meubles, les zones colorées et les cases hachurées comptent autant
+          que les cases vides.
+        </p>
+        <p>
+          Une fois la scène complète, le <strong>meurtrier</strong> est la personne
+          restée seule avec la victime dans la même zone.
+        </p>
+        <ul class="aide-touches">
+          <li><kbd>1</kbd>…<kbd>9</kbd> choisir une personne</li>
+          <li><kbd>clic</kbd> sur une case : placer</li>
+          <li><kbd>X</kbd> marquer une case impossible</li>
+          <li><kbd>C</kbd> marquer une position possible</li>
+          <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler · <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>Z</kbd> rétablir</li>
+          <li><kbd>P</kbd> pause · <kbd>T</kbd> thème · <kbd>H</kbd> indice</li>
+        </ul>
+        <button type="button" id="bouton-fermer-aide" class="bouton bouton-primaire">Fermer</button>
+      </div>
+    </div>
+
+    <!-- ============ Fin ============ -->
+    <div id="fin" class="modale" role="status" hidden>
+      <div class="modale-boite modale-fin">
+        <button type="button" class="bouton-fermer" id="bouton-fermer-fin" aria-label="Fermer">×</button>
+        <h2 id="fin-titre">Affaire résolue</h2>
+        <p class="fin-sous-titre" id="fin-sous-titre"></p>
+        <div class="reveal" id="reveal"></div>
+        <div class="fin-actions">
+          <button type="button" class="bouton" id="bouton-revoir">Revoir la scène</button>
+          <button type="button" class="bouton bouton-primaire" id="bouton-nouvelle">Nouvelle affaire</button>
+        </div>
+      </div>
     </div>
 
     <div id="annonce" class="sr-only" role="status" aria-live="polite"></div>

@@ -33,7 +33,7 @@ await pause(30000); // laisser l'affaire se générer (jusqu'à 8×8 en ~5 s)
 
 const snapshot = await ev(`({
   cells: document.querySelectorAll('.cellule').length,
-  suspects: document.querySelectorAll('.suspect-carte').length,
+  suspects: document.querySelectorAll('.suspect').length,
   IndicesGeneraux: document.getElementById('liste-indices')?.children?.length ?? 0,
   titre: (document.getElementById('titre-affaire') || {}).textContent || '',
   terminee: false,

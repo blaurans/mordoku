@@ -3,10 +3,8 @@
  * Tout reste dans le navigateur.
  */
 
-import {
-  genererAffaire,
-  genererAffaireAuHasard,
-} from './murdoku/generator.js';
+import { genererAffaireAuHasard } from './murdoku/generator.js';
+import { enrichir } from './murdoku/clues.js';
 
 import {
   chargerPartie,
@@ -19,15 +17,13 @@ import {
 
 const DIFFICULTIES = [
   { id: 'debutant', label: 'Débutant', taille: 6, penaliteIndice: 60000 },
-  { id: 'facile', label: 'Facile', taille: 7, penaliteIndice: 90000 },
-  { id: 'intermediaire', label: 'Intermédiaire', taille: 8, penaliteIndice: 120000 },
+  { id: 'intermediaire', label: 'Intermédiaire', taille: 7, penaliteIndice: 90000 },
 ];
 
 const els = {
   scene: document.getElementById('scene'),
+  calqueNoms: document.getElementById('calque-noms'),
   titreAffaire: document.getElementById('titre-affaire'),
-  numeroCase: document.getElementById('numero-case'),
-  labelDifficulte: document.getElementById('label-difficulte'),
   selectDifficulte: document.getElementById('select-difficulte'),
   listeSuspects: document.getElementById('liste-suspects'),
   listeIndices: document.getElementById('liste-indices'),
@@ -36,7 +32,7 @@ const els = {
   voile: document.getElementById('voile'),
   chargement: document.getElementById('chargement'),
   chrono: document.getElementById('chrono'),
-  annoce: document.getElementById('annonce'),
+  annce: document.getElementById('annonce'),
   boutonPause: document.getElementById('bouton-pause'),
   boutonTheme: document.getElementById('bouton-theme'),
   boutonReprendre: document.getElementById('bouton-reprendre'),
@@ -44,13 +40,12 @@ const els = {
   boutonRetablir: document.getElementById('bouton-retablir'),
   boutonIndice: document.getElementById('bouton-indice'),
   compteurIndices: document.getElementById('compteur-indices'),
-  boutonVerifier: document.getElementById('bouton-verifier'),
   boutonSoumettre: document.getElementById('bouton-soumettre'),
-  btnOutOutil: [...document.querySelectorAll('.outil')],
-  btnOutSelection: document.getElementById('bouton-outil-selection'),
   btnOutX: document.getElementById('bouton-outil-x'),
-  btnOutCand: document.getElementById('bouton-outil-cand'),
   btnOutEffacer: document.getElementById('bouton-effacer'),
+  boutonAide: document.getElementById('bouton-aide'),
+  boutonFermerAide: document.getElementById('bouton-fermer-aide'),
+  aide: document.getElementById('aide'),
   themeIcone: document.getElementById('theme-icone'),
   fin: document.getElementById('fin'),
   finTitre: document.getElementById('fin-titre'),
@@ -58,7 +53,11 @@ const els = {
   reveal: document.getElementById('reveal'),
   boutonFermerFin: document.getElementById('bouton-fermer-fin'),
   boutonNouvelle: document.getElementById('bouton-nouvelle'),
+  boutonRevoir: document.getElementById('bouton-revoir'),
 };
+
+/** Portraits : un par suspect, tirés une fois pour l'affaire. */
+const PORTRAITS = ['👩🏻', '👨🏾', '👩🏼', '👨🏻', '👩🏽', '👨🏼', '👩🏿', '👨🏽'];
 
 const state = {
   affaire: null,
@@ -97,7 +96,7 @@ function formatDuration(ms) {
 }
 
 function annonce(msg) {
-  els.annoce.textContent = msg;
+  els.annce.textContent = msg;
 }
 
 function diffInfo() { return DIFFICULTIES.find((d) => d.id === state.difficulty) ?? DIFFICULTIES[0]; }
@@ -153,6 +152,7 @@ function reconstruireScene() {
   els.scene.style.setProperty('--cols', String(taille));
   els.scene.style.setProperty('--lignes', String(taille));
   els.scene.replaceChildren();
+  els.calqueNoms.replaceChildren();
 
   pieceTable = new Array(taille * taille).fill(-1);
   for (const piece of scene.pieces) {
@@ -163,35 +163,38 @@ function reconstruireScene() {
   const objetParCellule = new Map();
   for (const o of scene.objets) objetParCellule.set(o.cellule, o);
 
+  const pieceIdEn = (index) => pieceTable[index];
+
   for (let index = 0; index < taille * taille; index++) {
+    const ligne = Math.floor(index / taille);
+    const colonne = index % taille;
+    const piece = pieceIdEn(index);
+
     const cell = document.createElement('div');
     cell.className = 'cellule';
     cell.dataset.index = String(index);
-    cell.dataset.piece = String(pieceTable[index] ?? 0);
+    cell.dataset.piece = String(piece ?? 0);
     if (bloquees.has(index)) cell.classList.add('bloquee');
-    cell.setAttribute('role', 'gridcell');
-    cell.setAttribute('aria-label', `Case ${Math.floor(index / taille) + 1}-${index % taille + 1}`);
 
-    const interieur = document.createElement('div');
-    interieur.className = 'cellule-interieur';
+    // Contour épais là où la pièce change : c'est ce qui fait lire la carte
+    // comme un plan plutôt qu'une grille de cases.
+    const bords = [];
+    if (ligne === 0 || pieceIdEn(index - taille) !== piece) bords.push('haut');
+    if (ligne === taille - 1 || pieceIdEn(index + taille) !== piece) bords.push('bas');
+    if (colonne === 0 || pieceIdEn(index - 1) !== piece) bords.push('gauche');
+    if (colonne === taille - 1 || pieceIdEn(index + 1) !== piece) bords.push('droite');
+    if (bords.length) cell.dataset.bord = bords.join(' ');
+
+    cell.setAttribute('role', 'gridcell');
+    cell.setAttribute('aria-label', `Ligne ${ligne + 1}, colonne ${colonne + 1}`);
 
     const objet = objetParCellule.get(index);
     if (objet) {
       const span = document.createElement('span');
       span.className = 'objet';
       span.textContent = objet.emoji;
-      span.title = objet.nom;
-      interieur.append(span);
-    }
-
-    const piece = scene.pieces.find((p) => p.id === pieceTable[index]);
-    if (piece && piece.cellules[0] === index) {
-      const lp = document.createElement('span');
-      lp.className = 'label-piece';
-      const mots = piece.nom.split(/\s+/);
-      const rang = (mots[0] === 'LE' || mots[0] === 'LA' || mots[0] === 'LES' || mots[0] === "L'") ? 1 : 0;
-      lp.textContent = mots.slice(rang).join(' ');
-      interieur.append(lp);
+      span.title = `${objet.article} ${objet.nom}`;
+      cell.append(span);
     }
 
     const badge = document.createElement('div');
@@ -202,41 +205,83 @@ function reconstruireScene() {
     candBadges.className = 'cand-badges';
     candBadges.hidden = true;
 
-    cell.append(interieur, badge, candBadges);
-    cell.addEventListener('click', (evt) => {
+    cell.append(badge, candBadges);
+    cell.addEventListener('pointerdown', (evt) => {
       evt.preventDefault();
+      pointeurEnfonce = true;
+      surVISEE(index, cell);
+    });
+    cell.addEventListener('pointerenter', () => {
+      if (pointeurEnfonce) surVISEE(index, cell);
+    });
+    cell.addEventListener('pointerup', () => { pointeurEnfonce = false; });
+    cell.addEventListener('click', () => validerClic(index));
+    cell.addEventListener('contextmenu', (evt) => {
+      evt.preventDefault();
+      basculerOutilX();
       onCelluleClick(index);
     });
     els.scene.append(cell);
   }
 
-  requestAnimationFrame(() => stabiliserPièces());
+  poserNomsPieces();
   rendre();
 }
 
-function stabiliserPièces() {
-  if (!state.affaire) return;
-  const cells = [...els.scene.children];
-  const tableau = pieceTable;
-  // On force l'affichage sur la première case et on calcule la largeur
-  // matérielle de la pièce pour que les longs noms soient coupés par le
-  // navigateur au bon endroit (wrap) au lieu de déborder sans limite.
-  for (const piece of state.affaire.scene.pieces) {
-    const premiere = cells[piece.cellules[0]];
-    if (!premiere) continue;
-    const lp = premiere.querySelector('.label-piece');
-    if (!lp) continue;
-    const cellRect = premiere.getBoundingClientRect();
-    const taillePiece = (Math.max(...piece.cellules.map((c) => c % state.affaire.scene.taille)) - Math.min(...piece.cellules.map((c) => c % state.affaire.scene.taille)) + 1);
-    const largeur = Math.max(1, taillePiece);
-    lp.style.maxWidth = `${Math.max(40, cellRect.width * largeur - 4)}px`;
-    lp.style.whiteSpace = 'normal';
-    lp.style.wordBreak = 'break-word';
-    lp.style.overflowWrap = 'break-word';
-    lp.style.textAlign = 'center';
+/** Noms des pièces, centrés sur leur zone. */
+function poserNomsPieces() {
+  const scene = state.affaire.scene;
+  const taille = scene.taille;
+  els.calqueNoms.replaceChildren();
+
+  for (const piece of scene.pieces) {
+    const colonnes = piece.cellules.map((c) => c % taille);
+    const lignes = piece.cellules.map((c) => Math.floor(c / taille));
+    const centreL = (Math.min(...lignes) + Math.max(...lignes) + 1) / 2 / taille;
+    const centreC = (Math.min(...colonnes) + Math.max(...colonnes) + 1) / 2 / taille;
+
+    const mots = piece.nom.split(/\s+/);
+    const rang = ['LE', 'LA', 'LES', "L'"].includes(mots[0]) ? 1 : 0;
+
+    const label = document.createElement('span');
+    label.className = 'nom-piece';
+    if (piece.cellules.length <= 6) label.classList.add('serré');
+    label.textContent = mots.slice(rang).join(' ');
+    label.style.left = `${centreC * 100}%`;
+    label.style.top = `${centreL * 100}%`;
+    els.calqueNoms.append(label);
   }
 }
 
+let pointeurEnfonce = false;
+let celluleVisee = null;
+
+/**
+ * Survol « maintien » : on montre la case visée avant de placer, pour éviter
+ * les poses accidentelles. Un simple survol n'engage rien.
+ */
+function surVISEE(index, cell) {
+  if (state.terminee || state.enPause) return;
+  if (celluleVisee === index) return;
+  celluleVisee = index;
+  for (const autre of els.scene.children) autre.classList.remove('visée');
+  if (state.tool === 'personne') cell.classList.add('visée');
+}
+
+function validerClic(index) {
+  if (state.terminee || state.enPause) return;
+  onCelluleClick(index);
+}
+
+function basculerOutilX() {
+  state.tool = state.tool === 'x' ? 'personne' : 'x';
+  majOutils();
+}
+
+function majOutils() {
+  els.btnOutX.setAttribute('aria-pressed', String(state.tool === 'x'));
+  els.btnOutEffacer.setAttribute('aria-pressed', String(state.tool === 'effacer'));
+}
 
 function rendre() {
   if (!state.affaire) return;
@@ -288,10 +333,10 @@ function chargerListeIndices() {
   els.listeIndices.replaceChildren();
   let trouve = false;
   for (const c of (state.affaire.clues ?? [])) {
-    const global = c.masques && c.masques.every((m) => m === null);
+    const global = (c.sujets ?? []).length === 0;
     if (!global) continue;
     const li = document.createElement('li');
-    li.textContent = c.titre.replace(/^«\s*/, '').replace(/\s*»$/, '');
+    li.innerHTML = enrichir(c.titre, state.affaire.scene);
     els.listeIndices.append(li);
     trouve = true;
   }
@@ -300,28 +345,62 @@ function chargerListeIndices() {
 
 function construireListeSuspects() {
   const affaire = state.affaire;
+  const scene = affaire.scene;
   els.listeSuspects.replaceChildren();
-  for (let p = 0; p < affaire.scene.lettres.length; p++) {
-    const indices = (affaire.clues ?? []).filter((c) => c.masques && c.masques[p]);
-    const premiere = indices.length ? indices[0].titre.replace(/^«\\s*/, '').replace(/\\s*»$/, '') : 'Aucun indice direct.';
+
+  for (let p = 0; p < scene.noms.length; p++) {
+    const mesIndices = (affaire.clues ?? []).filter((c) => (c.sujets ?? []).includes(p));
+    const teinte = `var(--sus-${p % 8})`;
+
     const li = document.createElement('li');
-    const carte = document.createElement('div');
-    carte.className = 'suspect-carte';
-    carte.dataset.personne = String(p);
-    carte.innerHTML = `
-      <div class="badge-personne ${p === affaire.victime ? 'victime' : ''}">${affaire.scene.lettres[p]}</div>
-      <div>
-        <div class="suspect-titre">${affaire.scene.lettres[p]}${p === affaire.victime ? ' <span class="victime-label">Victime</span>' : ''}</div>
-        <p class="suspect-clue">${premiere}</p>
-        ${indices.length > 1 ? `<p class="suspect-clue-plus">+ ${indices.length - 1} indice${indices.length - 1 > 1 ? 's' : ''}</p>` : ''}
-      </div>
-    `;
-    carte.addEventListener('click', () => choisirPersonne(p));
-    li.append(carte);
+
+    const bouton = document.createElement('button');
+    bouton.type = 'button';
+    bouton.className = 'suspect';
+    bouton.dataset.personne = String(p);
+    bouton.style.setProperty('--teinte', teinte);
+    bouton.setAttribute('aria-pressed', String(p === state.selectedPerson));
+
+    const portrait = document.createElement('span');
+    portrait.className = 'portrait';
+    portrait.textContent = PORTRAITS[p % PORTRAITS.length];
+
+    const pastille = document.createElement('span');
+    pastille.className = 'marque-place';
+    pastille.textContent = scene.lettres[p];
+
+    const nom = document.createElement('span');
+    nom.className = 'nom';
+    nom.textContent = scene.noms[p];
+
+    portrait.append(pastille);
+    bouton.append(portrait, nom);
+    bouton.addEventListener('click', () => choisirPersonne(p));
+
+    const carte = document.createElement('p');
+    carte.className = 'carte-indice';
+    carte.style.setProperty('--teinte', teinte);
+    if (p === affaire.victime) {
+      carte.classList.add('victime');
+      carte.innerHTML = '<strong>La victime.</strong> Elle était <strong>seule</strong> avec le meurtrier.';
+    } else if (mesIndices.length) {
+      carte.innerHTML = mesIndices.map((c) => enrichir(c.titre, scene)).join('<br>');
+    } else {
+      carte.classList.add('vide');
+      carte.textContent = 'Aucun indice direct — déduisez de la scène.';
+    }
+
+    li.append(bouton, carte);
     els.listeSuspects.append(li);
-    carte.classList.toggle('selectionne', p === state.selectedPerson);
-    carte.classList.toggle('place', state.placements[p] !== -1);
+    majEtatSuspect(p);
   }
+}
+
+function majEtatSuspect(p) {
+  const carte = els.listeSuspects.querySelector(`.suspect[data-personne="${p}"]`);
+  if (!carte) return;
+  carte.classList.toggle('placé', state.placements[p] !== -1);
+  carte.setAttribute('aria-pressed', String(p === state.selectedPerson));
 }
 
 function chargerRecordsUI() {
@@ -368,7 +447,6 @@ function restaurer(partie) {
 
     els.titreAffaire.textContent = affaire.scene.titre + (state.meurtrierRevele ? ' (résolu)' : '');
     const di = DIFFICULTIES.find((d) => d.id === state.difficulty) ?? DIFFICULTIES[0];
-    if (els.labelDifficulte) els.labelDifficulte.textContent = di.label;
     els.selectDifficulte.value = state.difficulty;
     chargerListeIndices();
     construireListeSuspects();
@@ -412,16 +490,8 @@ function renderAll() {
   mettreAjourValidation();
 }
 
-function mettreAjourOutilsUI() {
-  document.querySelectorAll('.outil').forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool));
-}
-
 function mettreAjourUISelection() {
-  document.querySelectorAll('.suspect-carte').forEach((c) => {
-    const p = Number(c.dataset.personne);
-    c.classList.toggle('selectionne', p === state.selectedPerson);
-    c.classList.toggle('place', state.placements[p] !== -1);
-  });
+  for (let p = 0; p < state.placements.length; p++) majEtatSuspect(p);
 }
 
 function mettreAjourValidation() {
@@ -481,7 +551,7 @@ function onCelluleClick(index) {
   if (state.historique.length > 250) state.historique.shift();
   state.futur = [];
 
-  mettreAjourOutilsUI();
+  majOutils();
   rendreScene();
   sauvegarderDifferé();
   mettreAjourValidation();
@@ -492,12 +562,14 @@ function snapCandidats(arr) {
 }
 
 function rendreScene() {
-  // re-apply classes on existing cellules
   const cells = [...els.scene.children];
   const pbCell = personByCell();
+  const scene = state.affaire.scene;
+
   for (let index = 0; index < cells.length; index++) {
     const cell = cells[index];
     cell.classList.remove('personne', 'victime', 'x-mark', 'has-candidat');
+    cell.style.removeProperty('--teinte');
     const badge = cell.querySelector('.badge-personne');
     badge.hidden = true;
     badge.classList.remove('victime');
@@ -505,13 +577,14 @@ function rendreScene() {
     if (candBadges) { candBadges.replaceChildren(); candBadges.hidden = true; }
 
     if (state.xMarks.has(index) && !pbCell.has(index)) cell.classList.add('x-mark');
+
     if (pbCell.has(index)) {
       const pp = pbCell.get(index);
       cell.classList.add('personne');
+      cell.style.setProperty('--teinte', `var(--sus-${pp % 8})`);
       if (pp === state.affaire.victime) cell.classList.add('victime');
       badge.hidden = false;
-      badge.textContent = state.affaire.scene.lettres[pp];
-      if (pp === state.affaire.victime) badge.classList.add('victime');
+      badge.textContent = scene.lettres[pp];
     } else {
       const candidats = state.candidats[index] ?? [];
       if (candidats.length) {
@@ -521,19 +594,18 @@ function rendreScene() {
           for (const pp of candidats) {
             const span = document.createElement('span');
             span.className = 'cand';
-            span.dataset.personne = String(pp);
-            span.textContent = state.affaire.scene.lettres[pp];
+            span.textContent = scene.lettres[pp];
             candBadges.append(span);
           }
         }
       }
     }
-  }  
-  state.xMarks && state.xMarks; // noop
+  }
+
   construireListeSuspects();
-  mettreAjourUISelection();
   mettreAjourValidation();
   majCompteurs();
+  majOutils();
   els.chrono.textContent = formatDuration(tempsEcoule());
 }
 
@@ -688,7 +760,7 @@ function basculerPause(force) {
   els.voile.hidden = !state.enPause;
   els.boutonPause.setAttribute('aria-pressed', String(state.enPause));
   sauvegarder();
-  annoncer(state.enPause ? 'En pause' : 'Reprise');
+  annonce(state.enPause ? 'En pause' : 'Reprise');
 }
 
 function appliquerTheme(theme) {
@@ -707,7 +779,6 @@ function nouvelleAffaire(difficulte = state.difficulty, tente = 0) {
   }
   els.chargement.hidden = false;
   state.difficulty = difficulte;
-  if (els.labelDifficulte) els.labelDifficulte.textContent = (DIFFICULTIES.find((d) => d.id === difficulte) ?? DIFFICULTIES[0]).label;
 
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {
@@ -734,7 +805,6 @@ function nouvelleAffaire(difficulte = state.difficulty, tente = 0) {
         state.futur = [];
         state.indices = 0;
         els.titreAffaire.textContent = affaire.scene.titre;
-        els.numeroCase.textContent = 'CAS';
         els.selectDifficulte.value = difficulte;
         state.lettresAffaire = affaire.scene.lettres;
 
@@ -749,7 +819,7 @@ function nouvelleAffaire(difficulte = state.difficulty, tente = 0) {
         chargerListeIndices();
         reconstruireScene();
         chargerRecordsUI();
-        mettreAjourOutilsUI();
+        majOutils();
         els.chargement.hidden = true;
         els.fin.hidden = true;
         mettreAjourUISelection();
@@ -765,45 +835,56 @@ function nouvelleAffaire(difficulte = state.difficulty, tente = 0) {
 }
 
 function brancher() {
-  els.btnOutSelection.addEventListener('click', () => { state.tool = 'personne'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); });
-  els.btnOutX.addEventListener('click', () => { state.tool = 'x'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); });
-  els.btnOutEffacer.addEventListener('click', () => { state.tool = 'effacer'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); });
-  els.btnOutCand.addEventListener('click', () => { state.tool = 'candidat'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); });
+  // Outils du bandeau droit
+  els.btnOutX.addEventListener('click', () => { state.tool = 'x'; majOutils(); });
+  els.btnOutEffacer.addEventListener('click', () => { state.tool = 'effacer'; majOutils(); });
 
   els.boutonPause.addEventListener('click', () => basculerPause());
   els.boutonReprendre.addEventListener('click', () => basculerPause(false));
-  els.boutonTheme.addEventListener('click', () => appliquerTheme(state.theme === 'sombre' ? 'clair' : 'sombre'));
+  els.boutonTheme.addEventListener('click', () => appliquerTheme(state.theme === 'clair' ? 'sombre' : 'clair'));
   els.boutonAnnuler.addEventListener('click', undo);
   els.boutonRetablir.addEventListener('click', redo);
   els.boutonIndice.addEventListener('click', donnerIndice);
-  els.boutonVerifier.addEventListener('click', verifierCases);
   els.boutonSoumettre.addEventListener('click', soumettre);
-  els.boutonNouvelle.addEventListener('click', () => nouvelleAffaire(state.difficulty));
-  els.selectDifficulte.addEventListener('change', (e) => {
-    state.difficulty = e.target.value;
-    nouvelleAffaire(state.difficulty);
-  });
+  els.boutonNouvelle.addEventListener('click', () => { els.fin.hidden = true; nouvelleAffaire(state.difficulty); });
+  els.boutonRevoir.addEventListener('click', () => { els.fin.hidden = true; });
   els.boutonFermerFin.addEventListener('click', () => { els.fin.hidden = true; });
+  els.boutonAide.addEventListener('click', () => { els.aide.hidden = false; });
+  els.boutonFermerAide.addEventListener('click', () => { els.aide.hidden = true; });
+  els.aide.addEventListener('click', (e) => { if (e.target === els.aide) els.aide.hidden = true; });
+
+  els.selectDifficulte.addEventListener('change', (e) => nouvelleAffaire(e.target.value));
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'p' || e.key === 'P') basculerPause();
-    if (e.key === 't' || e.key === 'T') appliquerTheme(state.theme === 'sombre' ? 'clair' : 'sombre');
-    if (e.key === 'x' || e.key === 'X') { state.tool = 'x'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); }
-    if (e.key === 'c' || e.key === 'C') { state.tool = 'candidat'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); }
-    if (e.key === 'Escape') { state.tool = 'personne'; els.btnOutOutil.forEach((b) => b.classList.toggle('actif', b.dataset.outil === state.tool)); }
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        e.shiftKey ? redo() : undo();
+      }
+      return;
+    }
+    switch (e.key) {
+      case 'p': case 'P': basculerPause(); break;
+      case 't': case 'T': appliquerTheme(state.theme === 'clair' ? 'sombre' : 'clair'); break;
+      case 'x': case 'X': state.tool = 'x'; majOutils(); break;
+      case 'c': case 'C': state.tool = 'candidat'; majOutils(); break;
+      case 'h': case 'H': donnerIndice(); break;
+      case 'Escape': state.tool = 'personne'; majOutils(); break;
+      case '?': els.aide.hidden = !els.aide.hidden; break;
+      default:
+        if (e.key >= '1' && e.key <= '8') {
+          const p = Number(e.key) - 1;
+          if (p < state.placements.length) choisirPersonne(p);
+        }
+    }
   });
 
   appliquerTheme(chargerTheme());
   els.selectDifficulte.value = state.difficulty;
 
   const partie = chargerPartie();
-  if (partie) {
-    restaurer(partie);
-  } else {
-    nouvelleAffaire(state.difficulty);
-  }
-
-  els.annoce = document.getElementById('annonce');
+  if (partie) restaurer(partie);
+  else nouvelleAffaire(state.difficulty);
 }
 
 brancher();

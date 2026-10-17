@@ -154,7 +154,7 @@ export const Fabriques = [
     const masques = Array.from({ length: suspects }, (_, i) =>
       i === personne ? cellulesAdjacentesA(scene, objet) : null,
     );
-    return { id: `cote-${personne}-${objet.id}`, titre: `« ${scene.lettres[personne]} est à côté de ${label(objet)}. »`, masques, global: null };
+    return { id: `cote-${personne}-${objet.id}`, sujets: [personne], titre: `« ${scene.noms[personne]} est à côté de ${label(objet)}. »`, masques, global: null };
   },
   // --- indice 2 : cardinal par rapport à un objet ---
   (scene, placement, random) => {
@@ -179,7 +179,7 @@ export const Fabriques = [
     const masques = Array.from({ length: suspects }, (_, i) =>
       i === personne ? masque : null,
     );
-    return { id: `card-${personne}-${objet.id}-${direction}`, titre: `« ${scene.lettres[personne]} est ${toCardinal(direction)} de ${label(objet)}. »`, masques, global: null };
+    return { id: `card-${personne}-${objet.id}-${direction}`, sujets: [personne], titre: `« ${scene.noms[personne]} est ${toCardinal(direction)} de ${label(objet)}. »`, masques, global: null };
   },
   // --- indice 3 : au moins N personnes dans la pièce ---
   (scene, placement, random) => {
@@ -194,7 +194,7 @@ export const Fabriques = [
       for (let p = 0; p < suspects; p++) if (piece.cellules.includes(attribution[p])) n++;
       return n >= seuil;
     };
-    return { id: `au-moins-${piece.id}-${seuil}`, titre: `« Au moins ${seuil} personnes dans ${piece.nom}. »`, masques: Array(suspects).fill(null), global };
+    return { id: `au-moins-${piece.id}-${seuil}`, sujets: [], titre: `« Au moins ${seuil} personnes dans ${piece.nom}. »`, masques: Array(suspects).fill(null), global };
   },
   // --- indice 4 : la seule personne dans sa pièce (isolé) ---
   (scene, placement, random) => {
@@ -206,7 +206,7 @@ export const Fabriques = [
     if (Alone !== 1) return null;
     const personne = placement.indexOf(cellule);
     const masques = Array.from({ length: suspects }, (_, i) => i === personne ? masqueIndices(scene, piece.cellules) : (function () { const m = masquePlein(scene.taille * scene.taille); for (const c of piece.cellules) m[c] = 0; return m; })());
-    return { id: `seule-${personne}-${piece.id}`, titre: `« ${scene.lettres[personne]} est la seule personne dans ${piece.nom}. »`, masques, global: null };
+    return { id: `seule-${personne}-${piece.id}`, sujets: [personne], titre: `« ${scene.noms[personne]} est la seule personne dans ${piece.nom}. »`, masques, global: null };
   },
   // --- indice 5 : la seule personne sur un objet ---
   (scene, placement, random) => {
@@ -227,7 +227,7 @@ export const Fabriques = [
       const count = attribution.filter((cell) => occ.includes(cell)).length;
       return count === 1;
     };
-    return { id: `seule-sur-${personne}-${objet.id}`, titre: `« ${scene.lettres[personne]} est la seule personne sur ${label(objet)}. »`, masques, global };
+    return { id: `seule-sur-${personne}-${objet.id}`, sujets: [personne], titre: `« ${scene.noms[personne]} est la seule personne sur ${label(objet)}. »`, masques, global };
   },
   // --- indice 6 : ligne exacte (X est dans la ligne N) ---
   (scene, placement, random) => {
@@ -242,7 +242,8 @@ export const Fabriques = [
     );
     return {
       id: `ligne-${pessoa}-${ligne}`,
-      titre: `« ${scene.lettres[pessoa]} est dans la ligne ${ligne + 1}. »`,
+      sujets: [pessoa],
+      titre: `« ${scene.noms[pessoa]} est dans la ligne ${ligne + 1}. »`,
       masques,
       global: null,
     };
@@ -260,7 +261,8 @@ export const Fabriques = [
     );
     return {
       id: `colonne-${pessoa}-${colonne}`,
-      titre: `« ${scene.lettres[pessoa]} est dans la colonne ${colonne + 1}. »`,
+      sujets: [pessoa],
+      titre: `« ${scene.noms[pessoa]} est dans la colonne ${colonne + 1}. »`,
       masques,
       global: null,
     };
@@ -293,7 +295,8 @@ export const Fabriques = [
     );
     return {
       id: `diag-${personne}-${candidatObjet.id}`,
-      titre: `« ${scene.lettres[personne]} est sur la même diagonale que ${label(candidatObjet)}. »`,
+      sujets: [personne],
+      titre: `« ${scene.noms[personne]} est sur la même diagonale que ${label(candidatObjet)}. »`,
       masques,
       global: null,
     };
@@ -311,7 +314,7 @@ export const Fabriques = [
       if (i === p1 || i === p2) return masqueIndices(scene, piece1.cellules);
       return null;
     });
-    return { id: `meme-zone-${p1}-${p2}`, titre: `« ${scene.lettres[p1]} et ${scene.lettres[p2]} sont dans ${piece1.nom}. »`, masques, global: null };
+    return { id: `meme-zone-${p1}-${p2}`, sujets: [p1, p2], titre: `« ${scene.noms[p1]} et ${scene.noms[p2]} sont dans ${piece1.nom}. »`, masques, global: null };
   },
 ];
 
@@ -325,7 +328,7 @@ export function candidatsFabriques(scene, placement, random) {
   let garde = 0;
   // On pioche dans les fabriques, plusieurs fois chacune, en gardant les
   // résultats vrais et distincts.
-  while (garde < 80 && resultats.length < 18) {
+  while (garde < 160 && resultats.length < 34) {
     garde++;
     const fabrique = choisir(Fabriques, random);
     const critique = fabrique(scene, placement, random);
@@ -370,4 +373,53 @@ function choisir(tableau, random) {
 /** Une case est-elle interdite ? */
 function caseInterdite(scene, index) {
   return scene.interdites.some((i) => i.cellule === index);
+}
+
+/**
+ * Transforme le titre brut d'un indice en HTML, en mettant en valeur les
+ * mots qui portent l'information : nom de pièce, objet, direction,
+ * quantité. C'est ce qui rend une carte d'indice lisible d'un coup
+ * d'œil, au lieu d'un pavé de gris.
+ */
+export function enrichir(titre, scene) {
+  let texte = titre.replace(/^«\s*/, '').replace(/\s*»$/, '').trim();
+
+  const motifs = [];
+  for (const piece of scene.pieces) {
+    motifs.push(piece.nom);
+    motifs.push(piece.nom.replace(/^(LE|LA|LES|L')\s+/, ''));
+  }
+  for (const objet of scene.objets) motifs.push(`${objet.article} ${objet.nom}`.trim());
+  motifs.push(
+    'à côté de',
+    'sur la même diagonale que',
+    'au nord-est',
+    'au nord-ouest',
+    'au sud-est',
+    'au sud-ouest',
+    'au nord',
+    'au sud',
+    "à l'ouest",
+    "à l'est",
+    'la seule personne',
+    'seule avec',
+    'au moins',
+    'dans la ligne',
+    'dans la colonne',
+  );
+
+  // Le plus long motif d'abord, pour ne pas couper « au sud » dans
+  // « au sud-est ».
+  motifs.sort((a, b) => b.length - a.length);
+
+  for (const motif of motifs) {
+    if (!motif) continue;
+    const echappe = motif.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    texte = texte.replace(
+      new RegExp(`(^|[^<])(${echappe})`, 'g'),
+      (_, avant, trouve) => `${avant}<strong>${trouve}</strong>`,
+    );
+  }
+
+  return texte;
 }

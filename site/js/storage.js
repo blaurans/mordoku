@@ -62,8 +62,8 @@ export function enregistrerRecord(difficulte, millisecondes) {
 const THEMES_VALIDES = ['sombre', 'clair'];
 
 export function chargerTheme() {
-  const theme = lire(CLE_THEME, 'sombre');
-  return THEMES_VALIDES.includes(theme) ? theme : 'sombre';
+  const theme = lire(CLE_THEME, 'clair');
+  return THEMES_VALIDES.includes(theme) ? theme : 'clair';
 }
 
 export function sauverTheme(theme) {

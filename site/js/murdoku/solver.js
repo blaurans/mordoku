@@ -13,11 +13,12 @@
  * @param {Array<function(Uint16Array, scene): boolean>|null} globales
  * @param {number} limite   plafond de solutions à compter
  */
-export function compterSolutions(scene, masques, globales, limite = 10000) {
+export function compterSolutions(scene, masques, globales, limite = 10000, echeance = Infinity) {
   const N = scene.taille;
   const taille2 = N * N;
   const interdites = new Set((scene.interdites ?? []).map((x) => x.cellule));
   const limiteEffective = Math.max(1, limite);
+  let noeuds = 0;
 
   const masqueDe = masques.map((m, i) => (m ? m : plein(taille2)));
 
@@ -40,6 +41,9 @@ export function compterSolutions(scene, masques, globales, limite = 10000) {
 
   function chercher(personnesRestantes) {
     if (compte >= limiteEffective) return;
+    // Vérification périodique du budget : sans cela, un seul appel peut
+    // explorer des millions de nœuds et figer l'onglet du navigateur.
+    if ((++noeuds & 511) === 0 && Date.now() > echeance) return;
     if (personnesRestantes === 0) {
       if (verifierGlobales()) compte++;
       return;
@@ -91,7 +95,7 @@ export function compterSolutions(scene, masques, globales, limite = 10000) {
 }
 
 /** Résout la solution d'une attribution (déterministe : première trouvée). */
-export function resoudrePlacement(scene, masques, globales) {
+export function resoudrePlacement(scene, masques, globales, echeance = Infinity) {
   const N = scene.taille;
   const interdites = new Set((scene.interdites ?? []).map((x) => x.cellule));
   const masqueDe = masques.map((m) => (m ? m : plein(N * N)));
@@ -105,9 +109,11 @@ export function resoudrePlacement(scene, masques, globales) {
   const attribution = new Int16Array(N).fill(-1);
 
   let solution = null;
+  let noeuds = 0;
 
   function chercher(personnesRestantes) {
     if (solution) return;
+    if ((++noeuds & 511) === 0 && Date.now() > echeance) return;
     if (personnesRestantes === 0) {
       if (!globales || globales.every((g) => g(attribution, scene))) {
         solution = Array.from(attribution);

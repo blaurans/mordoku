@@ -170,6 +170,20 @@ export const THEMES = [
 
 const LETTRES = 'ABCDEFGHIJ';
 
+/**
+ * Prénoms des suspects. Tirés sans répétition dans chaque affaire : ça
+ * donne beaucoup plus de présence qu'une lettre, et l'indice devient
+ * « Elle était à côté de la plante » plutôt que « C est… ».
+ */
+export const NOMS = [
+  'Ada', 'Brigitte', 'Cameron', 'Darlène', 'Edison', 'Vinita',
+  'Odette', 'Renard', 'Colette', 'Marius', 'Sylvie', 'Antoine',
+  'Bernadette', 'Cyril', 'Delphine', 'Émile', 'Fantine', 'Gustave',
+  'Hortense', 'Joachim', 'Léonie', 'Marcel', 'Noémie', 'Octave',
+  'Perrine', 'Quentin', 'Roxane', 'Séverin', 'Thérèse', 'Ulysse',
+  'Valentin', 'Ysabeau',
+];
+
 /** Surface d'un rectangle de pièce. */
 const surface = (morceau) =>
   (morceau.maxL - morceau.minL + 1) * (morceau.maxC - morceau.minC + 1);
@@ -258,6 +272,7 @@ export function genererScene(taille, theme, random) {
   });
 
   // Un objet par pièce au minimum, plus quelques-uns supplémentaires.
+  const noms = shuffled(NOMS, random).slice(0, taille);
   const paletteObjets = [...theme.objets];
   const objets = [];
   for (const piece of pieces) {
@@ -294,6 +309,8 @@ export function genererScene(taille, theme, random) {
     interdites,
     /** Pour chaque personne, une lettre d'identité. */
     lettres: LETTRES.slice(0, taille),
+    /** Et un prénom, pour la présentation. */
+    noms: [...noms],
   };
 }
 
