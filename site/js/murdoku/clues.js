@@ -14,6 +14,8 @@
  * le tableau qu'une fois toutes les cases remplies.
  */
 
+import { avecArticle, avecArticleApres } from './scene.js';
+
 const directions = {
   nord: (l, c, l2, c2) => l > l2 && c === c2,
   sud: (l, c, l2, c2) => l < l2 && c === c2,
@@ -119,10 +121,6 @@ function celluleObjet(scene, idObjet) {
   return scene.objets.find((o) => o.id === idObjet)?.cellule ?? -1;
 }
 
-/** Article + nom avec espace, pour les titres. */
-function label(objet) {
-  return `${objet.article} ${objet.nom}`.trim();
-}
 
 /** Convertit un objet de scène en texte piéce. */
 function nomPiece(scene, pieceId) {
@@ -154,7 +152,7 @@ export const Fabriques = [
     const masques = Array.from({ length: suspects }, (_, i) =>
       i === personne ? cellulesAdjacentesA(scene, objet) : null,
     );
-    return { id: `cote-${personne}-${objet.id}`, sujets: [personne], titre: `« ${scene.noms[personne]} est à côté de ${label(objet)}. »`, masques, global: null };
+    return { id: `cote-${personne}-${objet.id}`, sujets: [personne], titre: `« ${scene.noms[personne]} est à côté ${avecArticleApres('de', objet)}. »`, masques, global: null };
   },
   // --- indice 2 : cardinal par rapport à un objet ---
   (scene, placement, random) => {
@@ -179,7 +177,7 @@ export const Fabriques = [
     const masques = Array.from({ length: suspects }, (_, i) =>
       i === personne ? masque : null,
     );
-    return { id: `card-${personne}-${objet.id}-${direction}`, sujets: [personne], titre: `« ${scene.noms[personne]} est ${toCardinal(direction)} de ${label(objet)}. »`, masques, global: null };
+    return { id: `card-${personne}-${objet.id}-${direction}`, sujets: [personne], titre: `« ${scene.noms[personne]} est ${toCardinal(direction)} ${avecArticleApres('de', objet)}. »`, masques, global: null };
   },
   // --- indice 3 : au moins N personnes dans la pièce ---
   (scene, placement, random) => {
@@ -227,7 +225,7 @@ export const Fabriques = [
       const count = attribution.filter((cell) => occ.includes(cell)).length;
       return count === 1;
     };
-    return { id: `seule-sur-${personne}-${objet.id}`, sujets: [personne], titre: `« ${scene.noms[personne]} est la seule personne sur ${label(objet)}. »`, masques, global };
+    return { id: `seule-sur-${personne}-${objet.id}`, sujets: [personne], titre: `« ${scene.noms[personne]} est la seule personne sur ${avecArticle(objet)}. »`, masques, global };
   },
   // --- indice 6 : ligne exacte (X est dans la ligne N) ---
   (scene, placement, random) => {
@@ -296,7 +294,7 @@ export const Fabriques = [
     return {
       id: `diag-${personne}-${candidatObjet.id}`,
       sujets: [personne],
-      titre: `« ${scene.noms[personne]} est sur la même diagonale que ${label(candidatObjet)}. »`,
+      titre: `« ${scene.noms[personne]} est sur la même diagonale que ${avecArticle(candidatObjet)}. »`,
       masques,
       global: null,
     };
@@ -389,7 +387,7 @@ export function enrichir(titre, scene) {
     motifs.push(piece.nom);
     motifs.push(piece.nom.replace(/^(LE|LA|LES|L')\s+/, ''));
   }
-  for (const objet of scene.objets) motifs.push(`${objet.article} ${objet.nom}`.trim());
+  for (const objet of scene.objets) motifs.push(avecArticle(objet));
   motifs.push(
     'à côté de',
     'sur la même diagonale que',

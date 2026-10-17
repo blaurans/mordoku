@@ -5,7 +5,8 @@
 
 import { genererAffaireAuHasard } from './murdoku/generator.js';
 import { enrichir } from './murdoku/clues.js';
-import { deduire } from './murdoku/solution.js';
+import { avecArticle } from './murdoku/scene.js';
+import { deduire, position, nomInterdit } from './murdoku/solution.js';
 
 import {
   chargerPartie,
@@ -208,7 +209,7 @@ function reconstruireScene() {
       const span = document.createElement('span');
       span.className = 'objet';
       span.textContent = objet.emoji;
-      span.title = `${objet.article} ${objet.nom}`;
+      span.title = avecArticle(objet);
       cell.append(span);
     }
 
@@ -293,7 +294,7 @@ function montrerInfo(index) {
   bulle.className = 'infobulle';
   bulle.style.left = `${((colonne + 0.5) / N) * 100}%`;
   bulle.style.top = `${((ligne + 0.5) / N) * 100}%`;
-  if (objet) bulle.textContent = `${objet.article} ${objet.nom}`.trim();
+  if (objet) bulle.textContent = avecArticle(objet);
   else bulle.textContent = piece.nom;
   bulle.dataset.objet = objet ? '1' : '0';
   els.calqueInfos.append(bulle);
@@ -997,6 +998,143 @@ function ouvrirSectionSolution() {
   }
 }
 
+/** « L2 C3, L2 C5, L4 C1… » — jusqu'à 6 cases, puis le compte du reste. */
+function listerCases(scene, cellules) {
+  if (cellules.length <= 6) return cellules.map((c) => position(scene, c)).join(', ');
+  return `${cellules.slice(0, 6).map((c) => position(scene, c)).join(', ')} et ${cellules.length - 6} autres`;
+}
+
+/**
+ * Les pièces sont stockées en majuscules (« LE WAGON-RESTAURANT ») : c'est
+ * lisible sur la grille, criard dans une phrase. On ne met en minuscules que
+ * les mots qui ne sont pas un prénom, le début de phrase restant intact.
+ */
+function enMinuscules(texte) {
+  return texte
+    .split(' ')
+    .map((mot) => (/^[A-ZÉÈÊÀÎÔÛÇ'’-]{2,}$/.test(mot) ? mot.toLowerCase() : mot))
+    .join(' ');
+}
+
+/** Citation d'indice puis effet, les deux sur la même ligne. */
+function citation(scene, d, precision = '') {
+  const el = document.createElement('span');
+  const guillemet = document.createElement('em');
+  guillemet.className = 'cause-indice';
+  // Les pièces sont stockées en majuscules pour la grille ; en prose on
+  // préfère « le wagon-restaurant ».
+  guillemet.textContent = `« ${enMinuscules(d.titre)} »`;
+  const effet = effetIndice(scene, d);
+  el.append(
+    guillemet,
+    document.createTextNode(precision ? ` ${effet} — ${precision}.` : ` ${effet}.`),
+  );
+  return el;
+}
+
+/** Une ligne « cause → effet » dans le détail d'une étape. */
+function ligneCause(cause, effet) {
+  const li = document.createElement('li');
+  const qui = document.createElement('span');
+  qui.className = 'cause-qui';
+  qui.textContent = cause;
+  li.append(qui);
+  if (typeof effet === 'string') li.append(document.createTextNode(` ${effet}`));
+  else li.append(document.createTextNode(' '), effet);
+  return li;
+}
+
+/**
+ * Phrase d'effet d'un indice. Quand il ne reste que quelques cases, on dit
+ * ce qu'il laisse : c'est le cœur du raisonnement. Sinon on dit ce qu'il
+ * écarte, en plafonnant la liste.
+ */
+function effetIndice(scene, d) {
+  const reste = d.garde?.length ?? 0;
+  if (reste === 0) return `ne laisse aucune place`;
+  if (reste === 1) return `ne laisse que la case ${position(scene, d.garde[0])}`;
+  if (reste <= 6) return `ne laisse que ${reste} cases : ${d.garde.map((c) => position(scene, c)).join(', ')}`;
+  return `écarte ${listerCases(scene, d.eliminees)}`;
+}
+
+/**
+ * Une étape du raisonnement, avec pour chaque élimination sa cause : quel
+ * indice écarte quelles cases, quelle ligne ou colonne déjà prise, quelle
+ * case hors-jeu. C'est la question « pourquoi cette case et pas une autre ».
+ */
+function construireEtape(scene, etape) {
+  const d = etape.detail;
+  const qui = scene.noms[etape.personne];
+  const N = scene.taille;
+
+  const li = document.createElement('li');
+  li.className = 'etape';
+
+  const tete = document.createElement('p');
+  tete.className = 'etape-tete';
+  const tag = document.createElement('span');
+  tag.className = 'etiquette-regle';
+  tag.textContent = etape.regle === 'case-unique' ? 'Case unique' : 'Position forcée';
+  tete.append(
+    tag,
+    document.createTextNode(`${qui} n’a plus qu’une place possible : `),
+    Object.assign(document.createElement('strong'), { textContent: position(scene, etape.cellule) }),
+  );
+  li.append(tete);
+
+  // Où partait le raisonnement avant de conclure.
+  const part = document.createElement('p');
+  part.className = 'etape-part';
+  if (etape.regle === 'case-unique') {
+    const avant = d.sesIndices.length || d.autresIndices.length || d.lignesPrises.length || d.interdites.length
+      ? `Les ${N * N} cases de la scène se réduisent une à une jusqu’à ${etape.candidates.length} :`
+      : `Sur les ${N * N} cases, une seule satisfait tous les indices :`;
+    part.textContent = avant;
+  } else {
+    part.textContent =
+      `${etape.candidates.length} cases semblaient possibles (${listerCases(scene, etape.candidates)}). ` +
+      `Mais en essayant toutes les autres, aucune ne permet de placer les suspects qui restent : ` +
+      `chacune bloque quelqu’un d’autre. C’est donc une position forcée.`;
+  }
+  li.append(part);
+
+  const causes = document.createElement('ul');
+  causes.className = 'etape-causes';
+
+  for (const s of d.sesIndices) {
+    causes.append(ligneCause('Son indice', citation(scene, s, '')));
+  }
+  for (const a of d.autresIndices) {
+    // Un indice qui nomme le suspect est aussi le sien : « Thérèse et
+    // Séverin sont dans la clairière » le concerne au premier chef.
+    const commun = (a.sujets ?? []).includes(etape.personne);
+    causes.append(
+      ligneCause(commun ? 'Le concerning' : 'Un autre indice', citation(scene, a, commun ? '' : 'pour ce suspect')),
+    );
+  }
+  for (const l of d.lignesPrises) {
+    causes.append(ligneCause('Déjà placé', `${l.par} tient la ligne ${l.ligne + 1} : toute la ligne est écartée`));
+  }
+  for (const c of d.colonnesPrises) {
+    causes.append(ligneCause('Déjà placé', `${c.par} tient la colonne ${c.colonne + 1} : toute la colonne est écartée`));
+  }
+  for (const c of d.interdites) {
+    causes.append(ligneCause('Hors-jeu', `${position(scene, c)} — ${nomInterdit(scene, c)} : case inutilisable.`));
+  }
+  li.append(causes);
+
+  const conclusion = document.createElement('p');
+  conclusion.className = 'etape-conclusion';
+  conclusion.append(
+    document.createTextNode('Au total, une seule case survit : '),
+    Object.assign(document.createElement('strong'), { textContent: position(scene, etape.cellule) }),
+    document.createTextNode('. Tout le reste était impossible.'),
+  );
+  li.append(conclusion);
+
+  return li;
+}
+
 function afficherSolution() {
   const affaire = state.affaire;
   const scene = affaire.scene;
@@ -1012,24 +1150,40 @@ function afficherSolution() {
     els.raisonnement.append(vide);
   } else {
     if (!deduction.complet) {
-      const avert = document.createElement('p');
+      const avert = document.createElement('div');
       avert.className = 'avertissement';
-      avert.textContent =
-        `${deduction.etapes.length} position${deduction.etapes.length > 1 ? 's' : ''} ` +
-        `se dédui${deduction.etapes.length > 1 ? 'sent' : 't'} directement. ` +
-        `La fin de l'affaire demande ensuite de combiner plusieurs indices ` +
-        `simultanément : je ne l'explique pas ici plutôt que d'inventer ` +
-        `un raisonnement qui ne serait pas vérifiable.`;
+
+      const intro = document.createElement('p');
+      intro.style.margin = '0 0 8px';
+      const nb = deduction.etapes.length;
+      intro.textContent =
+        `${nb} position${nb > 1 ? 's' : ''} se dédui${nb > 1 ? 'sent' : 't'} ainsi, en n'utilisant qu'un indice à la fois. ` +
+        `Ensuite, plus aucun suspect n'a de case unique : il faut croiser plusieurs indices simultanément.`;
+      avert.append(intro);
+
+      const reste = deduction.restants ?? [];
+      if (reste.length) {
+        const detail = document.createElement('p');
+        detail.style.margin = '0';
+        const grands = reste.filter((r) => r.cellules.length > 1).map((r) => `${r.nom} (${r.cellules.length})`);
+        detail.textContent =
+          `Il reste ${reste.length} suspect${reste.length > 1 ? 's' : ''} à placer : ` +
+          (grands.length ? `${grands.join(', ')} — c'est le nombre de cases encore ouvertes pour chacun.` : 'aucune n’a de place unique.');
+        avert.append(detail);
+      }
+
+      const note = document.createElement('p');
+      note.style.margin = '8px 0 0';
+      note.textContent =
+        "Je m'arrête là : expliquer la suite supposerait d'inventer un raisonnement que je ne peux pas vérifier.";
+      avert.append(note);
+
       els.raisonnement.append(avert);
     }
     const liste = document.createElement('ol');
+    liste.className = 'liste-etapes';
     for (const etape of deduction.etapes) {
-      const li = document.createElement('li');
-      const tag = document.createElement('span');
-      tag.className = 'etiquette-regle';
-      tag.textContent = etape.explicationCourte;
-      li.append(tag, document.createTextNode(etape.raison));
-      liste.append(li);
+      liste.append(construireEtape(scene, etape));
     }
     els.raisonnement.append(liste);
   }

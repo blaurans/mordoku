@@ -169,6 +169,35 @@ export const THEMES = [
 ];
 
 /**
+ * Assemble un élément et son article : « la lampe », « l'horloge ».
+ * L'article « l' » porte déjà son espace, l'ajouter ferait « l' huile ».
+ * Utilisé partout où un objet est nommé en toutes lettres.
+ */
+export function avecArticle(element) {
+  if (!element) return '';
+  return `${element.article}${element.article.endsWith("'") ? '' : ' '}${element.nom}`;
+}
+
+/**
+ * Élément nommé après une préposition, élision comprise : « à côté du
+ * fauteuil », « dans l'horloge », « sur la lampe ».
+ */
+export function avecArticleApres(avant, element) {
+  if (!element) return '';
+  const a = element.article;
+  if (avant === 'de') {
+    if (a === 'le') return `du ${element.nom}`;
+    if (a === 'les') return `des ${element.nom}`;
+  }
+  if (avant === 'à') {
+    if (a === 'le') return `au ${element.nom}`;
+    if (a === 'les') return `aux ${element.nom}`;
+  }
+  // « de la lampe », « à l'horloge » : l'article « l' » emporte déjà son espace.
+  return `${avant} ${avecArticle(element)}`;
+}
+
+/**
  * Prénoms des suspects. Tirés sans répétition dans chaque affaire : ça
  * donne beaucoup plus de présence qu'une lettre, et l'indice devient
  * « Elle était à côté de la plante » plutôt que « C est… ».

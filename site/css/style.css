@@ -937,8 +937,12 @@ kbd {
   color: var(--encre-doux);
 }
 
+/* La modale de solution est plus large : la trace de raisonnement est dense. */
+.modale-solution {
+  width: min(680px, 100%);
+}
 .bloc-raisonnement {
-  max-height: 32vh;
+  max-height: 46vh;
   overflow-y: auto;
   margin: 12px 0 18px;
   padding: 12px 14px;
@@ -947,13 +951,69 @@ kbd {
 }
 .bloc-raisonnement ol {
   margin: 0;
-  padding-left: 20px;
+  padding-left: 0;
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  list-style: none;
 }
-.bloc-raisonnement li {
-  font-size: 0.86rem;
-  line-height: 1.45;
+
+/* --- Une déduction et la trace de ses éliminations --- */
+.etape {
+  padding: 11px 13px;
+  background: var(--carte);
+  border: var(--trait) solid var(--trait-couleur);
+  border-left: 5px solid var(--accent);
+  border-radius: 10px;
+}
+.etape-tete {
+  margin: 0 0 5px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.etape-part {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--encre-doux);
+}
+.etape-causes {
+  margin: 0 0 9px;
+  padding: 8px 10px;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 0.8rem;
+  line-height: 1.38;
+  background: var(--papier);
+  border-radius: 8px;
+}
+.etape-causes > li {
+  display: block;
+}
+.cause-qui {
+  display: inline-block;
+  margin-right: 7px;
+  padding: 1px 6px;
+  font-size: 0.64rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--encre-doux);
+  background: var(--carte);
+  border: 1px solid var(--trait-couleur);
+  border-radius: 5px;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.cause-indice {
+  color: var(--encre);
+  font-style: normal;
+  font-weight: 800;
+}
+.etape-conclusion {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
 }
 .etiquette-regle {
   display: inline-block;

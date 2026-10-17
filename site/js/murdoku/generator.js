@@ -110,6 +110,42 @@ function genererPlacement(scene, random, echeance = Infinity) {
   return { arrangement, victime, meurtrier };
 }
 
+/**
+ * Nombre de suspects qui n'ont plus qu'une case possible, et suspects qui
+ * n'en ont plus aucune (une impasse : l'indice est inutile).
+ *
+ * C'est ce chiffre qui rend une déduction démontrable en une ligne. À
+ * réduction de solutions égale, on préfère l'indice qui en crée le plus :
+ * le dossier se résout alors par une succession de déductions visibles,
+ * plutôt qu'en devinant des combinaisons.
+ */
+function compterCasesUniques(scene, masques) {
+  const N = scene.taille;
+  const interdites = new Set((scene.interdites ?? []).map((x) => x.cellule));
+  let uniques = 0;
+  let impasses = 0;
+  for (let p = 0; p < N; p++) {
+    const m = masques[p];
+    let libres = 0;
+    for (let c = 0; c < N * N; c++) {
+      if (interdites.has(c)) continue;
+      if (m && !m[c]) continue;
+      libres++;
+    }
+    if (libres === 1) uniques++;
+    else if (libres === 0) impasses++;
+  }
+  return { uniques, impasses };
+}
+
+/** Comparaison lexicographique de deux critères de sélection. */
+function comparerCles(a, b) {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+  }
+  return 0;
+}
+
 function verifierClue(clue, scene, arrangement) {
   if (clue.masques) {
     for (let p = 0; p < clue.masques.length; p++) {
@@ -151,8 +187,7 @@ function selectionnerIndices(scene, candidats, arrangement, random, echeance) {
     if (solsActuels === 0) break;
 
     let meilleur = -1;
-    let meilleureReduction = solsActuels;
-    let meilleureSpec = Infinity;
+    let meilleureCle = null;
 
     // On ne teste qu'un échantillon de 6 indices par tour, pour que la
     // génération reste fluide sur les grandes grilles.
@@ -166,10 +201,15 @@ function selectionnerIndices(scene, candidats, arrangement, random, echeance) {
       );
       const trialGlobales = [...globalesActuelles, ...(c.global ? [c.global] : [])];
       const sols = compterSolutions(scene, trialMasks, trialGlobales, 200, echeance);
-      const spec = specificite(c, scene);
-      if (sols > 0 && (sols < meilleureReduction || (sols === meilleureReduction && spec < meilleureSpec))) {
-        meilleureReduction = sols;
-        meilleureSpec = spec;
+      if (sols <= 0) continue;
+
+      // À réduction égale, on prend l'indice qui fabrique le plus de cases
+      // uniques : c'est ce qui rend la déduction démontrable au joueur.
+      const { uniques, impasses } = compterCasesUniques(scene, trialMasks);
+      const cle = [sols, impasses, -uniques, specificite(c, scene)];
+
+      if (meilleureCle === null || comparerCles(cle, meilleureCle) < 0) {
+        meilleureCle = cle;
         meilleur = i;
       }
       if (sols === 1) break;
