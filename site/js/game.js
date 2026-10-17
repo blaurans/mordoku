@@ -43,6 +43,7 @@ const els = {
   boutonAnnuler: document.getElementById('bouton-annuler'),
   boutonRetablir: document.getElementById('bouton-retablir'),
   boutonIndice: document.getElementById('bouton-indice'),
+  compteurIndices: document.getElementById('compteur-indices'),
   boutonVerifier: document.getElementById('bouton-verifier'),
   boutonSoumettre: document.getElementById('bouton-soumettre'),
   btnOutOutil: [...document.querySelectorAll('.outil')],
@@ -68,6 +69,7 @@ const state = {
   lettresAffaire: [],
   selectedPerson: 0,
   tool: 'personne',
+  indices: 0,
   elapsedMs: 0,
   runningSince: null,
   enPause: false,
@@ -120,6 +122,7 @@ function sauvegarder() {
     placements: state.placements.slice(),
     xMarks: [...state.xMarks],
     candidats: snapCandidats(state.candidats),
+    indices: state.indices,
     selectionPersonne: state.selectedPerson,
     historique: state.historique.slice(-200),
     futur: state.futur.slice(-200),
@@ -353,6 +356,7 @@ function restaurer(partie) {
       Array.isArray(partie.candidats?.[i]) ? partie.candidats[i].slice() : [],
     );
     state.selectedPerson = (Number.isInteger(partie.selectionPersonne) ? partie.selectionPersonne : 0);
+    state.indices = Number(partie.indices) || 0;
     state.elapsedMs = partie.elapsedMs ?? 0;
     state.runningSince = partie.runningSince ?? null;
     state.enPause = partie.enPause === true;
@@ -423,7 +427,7 @@ function mettreAjourUISelection() {
 function mettreAjourValidation() {
   els.boutonSoumettre.disabled = state.placements.some((p) => p === -1) || state.terminee;
   els.boutonAnnuler.disabled = state.historique.length === 0;
-  els.boutonRetablir.disabled = true;
+  els.boutonRetablir.disabled = state.futur.length === 0;
 }
 
 function choisirPersonne(p) {
@@ -529,6 +533,7 @@ function rendreScene() {
   construireListeSuspects();
   mettreAjourUISelection();
   mettreAjourValidation();
+  majCompteurs();
   els.chrono.textContent = formatDuration(tempsEcoule());
 }
 
@@ -542,12 +547,14 @@ function personByCell() {
 
 function undo() {
   if (!state.historique.length) return;
-  state.futur.push({ placements: state.placements.slice(), xMarks: [...state.xMarks], candidats: snapCandidats(state.candidats) });
+  state.futur.push({ placements: state.placements.slice(), xMarks: [...state.xMarks], candidats: snapCandidats(state.candidats), indices: state.indices });
   const precedent = state.historique.pop();
   state.placements = precedent.placements.slice();
   state.xMarks = new Set(precedent.xMarks);
   state.candidats = snapCandidats(precedent.candidats ?? []);
+  state.indices = precedent.indices ?? state.indices;
   rendreScene();
+  majCompteurs();
   sauvegarderDifferé();
   mettreAjourValidation();
   annonce('Coup annulé');
@@ -555,12 +562,14 @@ function undo() {
 
 function redo() {
   if (!state.futur.length) return;
-  state.historique.push({ placements: state.placements.slice(), xMarks: [...state.xMarks], candidats: snapCandidats(state.candidats) });
+  state.historique.push({ placements: state.placements.slice(), xMarks: [...state.xMarks], candidats: snapCandidats(state.candidats), indices: state.indices });
   const futur = state.futur.pop();
   state.placements = futur.placements.slice();
   state.xMarks = new Set(futur.xMarks);
   state.candidats = snapCandidats(futur.candidats ?? []);
+  state.indices = futur.indices ?? state.indices;
   rendreScene();
+  majCompteurs();
   sauvegarderDifferé();
   mettreAjourValidation();
   annonce('Coup rétabli');
@@ -585,10 +594,15 @@ function soumettre() {
     state.elapsedMs = tempsEcoule();
     state.runningSince = null;
     state.meurtrierRevele = true;
-    enregistrerRecord(state.difficulty, state.elapsedMs);
+    // Un temps obtenu avec des indices n'est pas un record honnête.
+    const record = state.indices === 0 && enregistrerRecord(state.difficulty, state.elapsedMs);
+    if (record) chargerRecordsUI();
 
+    const indices = state.indices > 0 ? ` · ${state.indices} indice${state.indices > 1 ? 's' : ''}` : '';
     els.finTitre.textContent = `Résolu — ${formatDuration(state.elapsedMs)}`;
-    els.finSousTitre.textContent = 'Toutes les déductions étaient justes.';
+    els.finSousTitre.textContent = indices
+      ? `${indices.slice(3)} — temps non retenu pour le record.`
+      : 'Toutes les déductions étaient justes.';
     const meurtrier = lettres()[state.affaire.meurtrier];
     const victime = lettres()[state.affaire.victime];
     els.reveal.innerHTML = `<strong>Meurtrier : ${meurtrier}</strong><br/>La victime <strong>${victime}</strong> est restée seule avec lui.`;
@@ -601,23 +615,65 @@ function soumettre() {
 }
 
 function donnerIndice() {
-  if (state.terminee || state.enPause) return;
+  if (state.terminee || state.enPause || !state.affaire) return;
   const affaire = state.affaire;
+
+  // Un indice ne sert à rien si tout le monde est déjà bien placé.
   let cible = -1;
   for (let p = 0; p < state.placements.length; p++) {
-    if (state.placements[p] === affaire.arrangement[p]) continue;
-    cible = p;
-    break;
+    if (state.placements[p] !== affaire.arrangement[p]) { cible = p; break; }
   }
-  if (cible === -1) return;
+  if (cible === -1) {
+    annonce('Tous les suspects sont déjà à leur place.');
+    return;
+  }
 
-  for (let p = 0; p < state.placements.length; p++) if (state.placements[p] === affaire.arrangement[cible]) state.placements[p] = -1;
+  // Photo avant l'indice, pour que la touche Annuler le reprenne.
+  const avant = {
+    placements: state.placements.slice(),
+    xMarks: [...state.xMarks],
+    candidats: snapCandidats(state.candidats),
+    indices: state.indices,
+  };
+
+  // Si le suspect est posé ailleurs, on libère sa case d'abord : impossible
+  // d'avoir deux personnes sur la même ligne et colonne.
+  for (let p = 0; p < state.placements.length; p++) {
+    if (state.placements[p] === affaire.arrangement[cible]) state.placements[p] = -1;
+  }
+
   state.placements[cible] = affaire.arrangement[cible];
+  state.xMarks.delete(affaire.arrangement[cible]);
+  state.indices = (state.indices ?? 0) + 1;
   state.elapsedMs += diffInfo().penaliteIndice;
-  els.chrono.textContent = formatDuration(tempsEcoule());
-  annonce(`Indice donné : ${lettres()[cible]} à sa place.`);
-  if (state.placements.every((x) => x !== -1)) soumettre();
-  sauvegarderDifferé();
+  state.selectedPerson = cible;
+
+  state.historique.push(avant);
+  if (state.historique.length > 250) state.historique.shift();
+  state.futur = [];
+
+  rendreScene();
+  mettreAjourUISelection();
+  majCompteurs();
+  sauvegarder();
+  annonce(
+    `Indice : ${lettres()[cible]} est dans ${etiquetteCellule(affaire.arrangement[cible])}. Pénalité ${Math.round(diffInfo().penaliteIndice / 1000)} s.`,
+  );
+  if (state.placements.every((x, i) => x === affaire.arrangement[i])) soumettre();
+}
+
+/** « ligne 3, colonne 5 », en base 1 comme le joueur les compte. */
+function etiquetteCellule(cellule) {
+  const n = state.affaire.scene.taille;
+  return `ligne ${Math.floor(cellule / n) + 1}, colonne ${(cellule % n) + 1}`;
+}
+
+function majCompteurs() {
+  if (!els.compteurIndices) return;
+  els.compteurIndices.textContent = String(state.indices ?? 0);
+  // Un indice coûte cher : on le décourage une fois la partie engagée.
+  const outilPossible = state.indices >= 3;
+  els.boutonIndice.disabled = state.terminee || state.enPause || outilPossible;
 }
 
 function basculerPause(force) {
@@ -676,6 +732,7 @@ function nouvelleAffaire(difficulte = state.difficulty, tente = 0) {
         state.meurtrierRevele = false;
         state.historique = [];
         state.futur = [];
+        state.indices = 0;
         els.titreAffaire.textContent = affaire.scene.titre;
         els.numeroCase.textContent = 'CAS';
         els.selectDifficulte.value = difficulte;

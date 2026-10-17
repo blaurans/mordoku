@@ -522,3 +522,14 @@ html[data-theme='clair'] .label-piece {
   color: var(--accent);
   opacity: 0.85;
 }
+
+.sous-compteurs {
+  margin: 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--texte-doux);
+}
+.sous-compteurs b {
+  font-family: var(--police-mono);
+  color: var(--texte);
+}
