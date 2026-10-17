@@ -987,3 +987,50 @@ kbd {
 .liste-solution strong {
   font-weight: 800;
 }
+
+/* ==========================================================================
+   Infobulle d'objet (survol de la scène)
+   ========================================================================== */
+
+.calque-infos {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.infobulle {
+  position: absolute;
+  transform: translate(-50%, -118%);
+  padding: 4px 9px 5px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--encre);
+  background: var(--carte);
+  border: 2px solid var(--trait-couleur);
+  border-radius: 8px;
+  box-shadow: var(--ombre-forte);
+}
+
+.infobulle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--trait-couleur);
+}
+
+/* Rangée du haut : la bulle se retourne vers le bas pour ne pas sortir. */
+.infobulle.haut {
+  transform: translate(-50%, 18%);
+}
+.infobulle.haut::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: var(--trait-couleur);
+}

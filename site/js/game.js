@@ -24,6 +24,7 @@ const DIFFICULTIES = [
 const els = {
   scene: document.getElementById('scene'),
   calqueNoms: document.getElementById('calque-noms'),
+  calqueInfos: document.getElementById('calque-infos'),
   titreAffaire: document.getElementById('titre-affaire'),
   selectDifficulte: document.getElementById('select-difficulte'),
   listeSuspects: document.getElementById('liste-suspects'),
@@ -229,6 +230,8 @@ function reconstruireScene() {
       if (pointeurEnfonce) surVISEE(index, cell);
     });
     cell.addEventListener('pointerup', () => { pointeurEnfonce = false; });
+    cell.addEventListener('pointerenter', () => montrerInfo(index));
+    cell.addEventListener('pointerleave', () => { if (!pointeurEnfonce) cacherInfo(); });
     cell.addEventListener('click', () => validerClic(index));
     cell.addEventListener('contextmenu', (evt) => {
       evt.preventDefault();
@@ -259,8 +262,10 @@ function poserNomsPieces() {
 
     const label = document.createElement('span');
     label.className = 'nom-piece';
-    if (piece.cellules.length <= 6) label.classList.add('serré');
-    label.textContent = mots.slice(rang).join(' ');
+    const texte = mots.slice(rang).join(' ');
+    // Nom long ou petite pièce : on réduit pour ne pas déborder sur la voisine.
+    if (piece.cellules.length <= 6 || texte.length > 12) label.classList.add('serré');
+    label.textContent = texte;
     label.style.left = `${centreC * 100}%`;
     label.style.top = `${centreL * 100}%`;
     els.calqueNoms.append(label);
@@ -269,6 +274,46 @@ function poserNomsPieces() {
 
 let pointeurEnfonce = false;
 let celluleVisee = null;
+let minuteurInfo = null;
+
+/** Affiche le nom de l'objet contenu dans une case, à la volée. */
+function montrerInfo(index) {
+  const cell = els.scene.children[index];
+  if (!cell) return;
+  const objet = state.affaire.scene.objets.find((o) => o.cellule === index);
+  const piece = state.affaire.scene.pieces.find((p) => p.cellules.includes(index));
+  els.calqueInfos.replaceChildren();
+  if (!objet && !piece) return;
+
+  const N = state.affaire.scene.taille;
+  const ligne = Math.floor(index / N);
+  const colonne = index % N;
+
+  const bulle = document.createElement('span');
+  bulle.className = 'infobulle';
+  bulle.style.left = `${((colonne + 0.5) / N) * 100}%`;
+  bulle.style.top = `${((ligne + 0.5) / N) * 100}%`;
+  if (objet) bulle.textContent = `${objet.article} ${objet.nom}`.trim();
+  else bulle.textContent = piece.nom;
+  bulle.dataset.objet = objet ? '1' : '0';
+  els.calqueInfos.append(bulle);
+
+  // Au survol la bulle suit le pointeur ; au doigt elle reste 2 s.
+  if (objet) bulle.classList.add('est-objet');
+  // Rangée du haut : on retourne la bulle vers le bas, sinon elle sort du cadre.
+  if (ligne === 0) bulle.classList.add('haut');
+
+  window.clearTimeout(minuteurInfo);
+  if (pointeurEnfonce) {
+    minuteurInfo = window.setTimeout(cacherInfo, 2000);
+  }
+}
+
+function cacherInfo() {
+  els.calqueInfos.replaceChildren();
+  window.clearTimeout(minuteurInfo);
+  minuteurInfo = null;
+}
 
 /**
  * Survol « maintien » : on montre la case visée avant de placer, pour éviter
@@ -789,6 +834,7 @@ function nouvelleAffaire(difficulte = state.difficulty, tente = 0) {
   if (tente >= 3) {
     annonce('Impossible de générer une affaire pour cette taille.');
     els.chargement.hidden = true;
+        cacherInfo();
     return;
   }
   els.chargement.hidden = false;
