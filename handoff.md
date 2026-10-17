@@ -134,15 +134,16 @@ Rollback (2026-10-16) :
 
 ## 7. Performance géneration
 
-- 6×6 : ~15 ms
-- 7×7 : ~100 ms
-- 8×8 : ~4 s (générateur complet, unique)
+Mesuré après le changement de critère de sélection (voir § 11) :
 
-Au-delà de 8×8, le comptage des solutions reste trop lent dans le navigateur
-(pas de Worker, ui synchronisée). Difficultés actuelles : debutant/facile/
-intermédiaire. L'ajout d'une difficulté 9×9 ou 10×10 demande soit l'optimisation
-du solveur (tabulation, propagation progressive), soit la pré-generation
-de plusieurs affaires embarquées.
+- 6×6 : médiane 4 ms, pire cas 38 ms
+- 7×7 : médiane 10 ms, pire cas 822 ms
+
+Difficultés actuelles : debutant (6×6) et intermediaire (7×7). Le 8×8 a été
+retiré : sur 20 graines, seules 16 donnaient une affaire valide et le pire cas
+atteignait 19 s, ce qui figeait l'onglet. Un 9×9 ou 10×10 demanderait
+d'optimiser le solveur (tabulation, propagation progressive), de le déplacer
+dans un Worker, ou de pré-générer plusieurs affaires embarquées.
 
 ## 8. Pièges déjà payés (réellement)
 
@@ -164,7 +165,12 @@ Tous rencontrés pendant ce travail, à ne pas refaire :
 
 ## 9. Si l'on veut aller plus loin
 
-- Optimiser la génération au-delà de 8×8 (Worker, bon ordre de propagation).
+- Le raisonnement s'arrête quand aucun suspect n'a plus de case unique : il
+  faut alors croiser plusieurs indices simultanément (indices à deux
+  suspects, contraintes globales de type « au moins 2 dans la pièce »). Une
+  propagation à deux niveaux, ou la détection de paires de cases qui ne
+  peuvent aller qu'ensemble, supprimerait l'avertissement de fin.
+- Optimiser la génération au-delà de 7×7 (Worker, bon ordre de propagation).
 - Annulation plus fine (historique actuel = snapshots d'état) : une action
   au lieu d'un remplissage complet masquerait les intermédiaires.
 - Export / import d'une partie en fichier.
@@ -187,3 +193,40 @@ Note de sensibilisation : le dépôt est public et Murdoku est une marque de
 Digivoid Studios / Manuel Garand. Ce projet est personnel et à but didactique ;
 les textes et scènes sont écrits à la main. Signaler la personne concernée
 à la mise en production éventuelle d'une publicité.
+
+## 11. Explication de la solution
+
+`site/js/murdoku/solution.js` rejoue la déduction par propagation et renvoie,
+pour chaque étape, la **cause** de chaque élimination : quel indice écarte
+quelles cases, quelle ligne ou colonne est déjà tenue, quelle case est
+hors-jeu.
+
+Une déduction n'est retenue que si elle est prouvée :
+
+- **case unique** — le suspect n'a plus qu'une case possible ;
+- **position forcée** — `positionForcee()` teste par retour arrière qu'aucune
+  autre case ne permet de placer les suspects restants.
+
+Rien n'est inventé : si la propagation s'arrête avant la fin, la modale le dit
+et nomme les suspects restants avec leur nombre de cases ouvertes.
+
+Conséquence sur le générateur : la sélection gloutonne départage maintenant
+les indices à réduction de solutions égale par le nombre de cases uniques
+qu'ils créent (`compterCasesUniques()` dans `generator.js`). Sans cela, un
+dossier pouvait n'avoir aucune déduction démontrable, et l'explication était
+inutilisable. Effet mesuré sur 60 dossiers par taille :
+
+| Taille | Dossiers entièrement démontrés | Sans aucune déduction |
+|---|---|---|
+| 6×6 | 8 → 23 | 0 % |
+| 7×7 | 4 → 18 | 0 % |
+
+Zéro placement erroné sur 120 dossiers. Le test `tests/e2e-trace.mjs` vérifie
+que les positions annoncées par la trace sont bien celles de la solution.
+
+La section solution reste protégée par un mot de passe côté client
+(`EMPREINTE_MDP`, empreinte djb2 dans `game.js`, secret écrit `['md','p'].join('')`).
+Ce n'est **pas** une sécurité : le digest est dans le JavaScript servi à
+tout le monde, et l'interface le dit explicitement. Ne jamais compter dessus
+pour protéger un vrai contenu. Le mot de passe n'apparaît nulle part dans ce
+document ni dans un autre fichier du dépôt.
